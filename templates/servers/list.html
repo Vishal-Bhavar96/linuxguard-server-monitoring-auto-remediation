@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Monitored Servers{% endblock %}
+{% block breadcrumb %}Monitored Server Infrastructure{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <div>
+        <h2>Registered Linux Nodes</h2>
+        <p style="color: var(--text-secondary); margin: 0;">Cluster hosts reporting real telemetry and operational status.</p>
+    </div>
+    {% if user_can_approve %}
+    <a href="{% url 'server_create' %}" class="btn btn-blue">+ Register New Server</a>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Hostname</th>
+                    <th>IP Address</th>
+                    <th>Operating System</th>
+                    <th>Status</th>
+                    <th>Last Seen</th>
+                    <th>Open Incidents</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in servers %}
+                <tr>
+                    <td>
+                        <a href="{% url 'server_detail' server_id=s.id %}" style="font-weight: 700; color: var(--text-heading);">
+                            {{ s.hostname }}
+                        </a>
+                        {% if s.is_local %}
+                        <span class="badge badge-info" style="margin-left: 4px;">Local Host</span>
+                        {% endif %}
+                    </td>
+                    <td><code>{{ s.ip_address }}</code></td>
+                    <td>{{ s.operating_system }}</td>
+                    <td>
+                        <span class="badge {% if s.status == 'ONLINE' %}badge-success{% elif s.status == 'CRITICAL' %}badge-danger{% else %}badge-warning{% endif %}">
+                            {{ s.get_status_display }}
+                        </span>
+                    </td>
+                    <td>{{ s.last_seen|date:"M d, Y H:i:s" }}</td>
+                    <td>
+                        {% if s.open_incident_count %}
+                        <span class="badge badge-danger">{{ s.open_incident_count }} Active</span>
+                        {% else %}
+                        <span class="badge badge-success">0 Incidents</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 0.35rem;">
+                            <a href="{% url 'server_detail' server_id=s.id %}" class="btn btn-secondary btn-sm">Overview</a>
+                            <a href="{% url 'server_metrics' server_id=s.id %}" class="btn btn-secondary btn-sm">Metrics</a>
+                            {% if user_can_approve %}
+                            <a href="{% url 'server_edit' server_id=s.id %}" class="btn btn-secondary btn-sm">Edit</a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                        No servers registered. Click 'Register New Server' or sample host telemetry.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

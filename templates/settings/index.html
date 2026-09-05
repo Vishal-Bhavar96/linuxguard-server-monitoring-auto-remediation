@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Platform Threshold Settings{% endblock %}
+{% block breadcrumb %}Platform Settings & Anomaly Thresholds{% endblock %}
+
+{% block content %}
+<div class="grid-2-1">
+    <!-- Threshold Configuration Form -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Anomaly Detection & Self-Healing Thresholds</h3>
+        </div>
+        <form method="POST">
+            {% csrf_token %}
+            <div class="card-body">
+                {% if not user_can_approve %}
+                <div class="alert-box alert-warning">
+                    Read-Only Mode: You must have the <strong>Administrator</strong> role to update platform configuration.
+                </div>
+                {% endif %}
+
+                <h4 style="margin-bottom: 1rem; color: var(--primary);">CPU Anomaly Thresholds</h4>
+                <div class="grid-2" style="margin-bottom: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">{{ form.cpu_warn.label }}</label>
+                        {{ form.cpu_warn }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">{{ form.cpu_crit.label }}</label>
+                        {{ form.cpu_crit }}
+                    </div>
+                </div>
+
+                <h4 style="margin-bottom: 1rem; color: var(--primary);">Memory (RAM) Anomaly Thresholds</h4>
+                <div class="grid-2" style="margin-bottom: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">{{ form.ram_warn.label }}</label>
+                        {{ form.ram_warn }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">{{ form.ram_crit.label }}</label>
+                        {{ form.ram_crit }}
+                    </div>
+                </div>
+
+                <h4 style="margin-bottom: 1rem; color: var(--primary);">Filesystem (Disk) Thresholds</h4>
+                <div class="grid-2" style="margin-bottom: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">{{ form.disk_warn.label }}</label>
+                        {{ form.disk_warn }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">{{ form.disk_crit.label }}</label>
+                        {{ form.disk_crit }}
+                    </div>
+                </div>
+
+                <h4 style="margin-bottom: 1rem; color: var(--primary);">SSH Security & Intrusion Alerting</h4>
+                <div class="grid-2" style="margin-bottom: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">{{ form.ssh_fail_limit.label }}</label>
+                        {{ form.ssh_fail_limit }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">{{ form.ssh_window_minutes.label }}</label>
+                        {{ form.ssh_window_minutes }}
+                    </div>
+                </div>
+
+                <h4 style="margin-bottom: 1rem; color: var(--primary);">Autonomous Healing Policy</h4>
+                <div class="form-check" style="margin-bottom: 1.5rem;">
+                    {{ form.auto_remediate_safe_services }}
+                    <label for="{{ form.auto_remediate_safe_services.id_for_label }}" style="font-weight: 600; font-size: 13px;">
+                        {{ form.auto_remediate_safe_services.label }}
+                    </label>
+                </div>
+            </div>
+
+            {% if user_can_approve %}
+            <div class="card-footer" style="display: flex; justify-content: flex-end;">
+                <button type="submit" class="btn btn-blue">Save & Apply Threshold Configuration</button>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Active Setting Registry Table -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Active Database Settings Registry</h3>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Setting Key</th>
+                        <th>Configured Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in settings_list %}
+                    <tr>
+                        <td>
+                            <strong>{{ item.key }}</strong>
+                            <div style="font-size: 11px; color: var(--text-secondary);">{{ item.description }}</div>
+                        </td>
+                        <td><code>{{ item.value }}</code></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="2" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                            No custom database overrides. Using system defaults.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

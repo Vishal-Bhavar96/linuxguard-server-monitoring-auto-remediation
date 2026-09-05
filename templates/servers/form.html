@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block breadcrumb %}<a href="{% url 'server_list' %}">Servers</a> / {{ title }}{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 650px; margin: 0 auto;">
+    <div class="card-header">
+        <h3 class="card-title">{{ title }}</h3>
+    </div>
+    <form method="POST">
+        {% csrf_token %}
+        <div class="card-body">
+            {% if form.errors %}
+            <div class="alert-box alert-danger">
+                Please correct the errors in the form below.
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.hostname.id_for_label }}">Hostname / FQDN</label>
+                {{ form.hostname }}
+                {% if form.hostname.errors %}<div style="color: var(--critical); font-size: 12px;">{{ form.hostname.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.ip_address.id_for_label }}">IP Address</label>
+                {{ form.ip_address }}
+                {% if form.ip_address.errors %}<div style="color: var(--critical); font-size: 12px;">{{ form.ip_address.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.operating_system.id_for_label }}">Operating System</label>
+                {{ form.operating_system }}
+                {% if form.operating_system.errors %}<div style="color: var(--critical); font-size: 12px;">{{ form.operating_system.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Operational Status</label>
+                {{ form.status }}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description / Purpose</label>
+                {{ form.description }}
+            </div>
+
+            <div class="form-check">
+                {{ form.is_local }}
+                <label for="{{ form.is_local.id_for_label }}" style="font-weight: 600; font-size: 13px;">
+                    This server represents the Local Host executing LinuxGuard
+                </label>
+            </div>
+        </div>
+
+        <div class="card-footer" style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+            <a href="{% url 'server_list' %}" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-blue">Save Server Configuration</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Service Health Monitoring{% endblock %}
+{% block breadcrumb %}Service Monitoring & Operations{% endblock %}
+
+{% block content %}
+<!-- Host Filter -->
+<div class="form-inline-filter" style="justify-content: space-between;">
+    <form method="GET" style="display: flex; gap: 0.75rem; align-items: center;">
+        <label class="form-label" style="margin: 0;" for="host_select">Monitored Host:</label>
+        <select name="server_id" id="host_select" class="form-select" style="width: 280px;" onchange="this.form.submit()">
+            {% for s in servers %}
+            <option value="{{ s.id }}" {% if selected_server.id == s.id %}selected{% endif %}>
+                {{ s.hostname }} ({{ s.ip_address }})
+            </option>
+            {% endfor %}
+        </select>
+        <noscript><button type="submit" class="btn btn-secondary btn-sm">Filter</button></noscript>
+    </form>
+    <div>
+        <span style="font-size: 13px; color: var(--text-secondary);">
+            Monitored Daemons: <code>ssh, nginx, docker, mysql, postgresql</code>
+        </span>
+    </div>
+</div>
+
+<!-- Optional Diagnostic Log Output Viewer -->
+{% if request.session.service_log_view %}
+<div class="card" style="border-color: var(--blue);">
+    <div class="card-header" style="background-color: #EFF6FF;">
+        <h3 class="card-title" style="color: var(--primary);">
+            Journalctl Diagnostic Logs: <code>{{ request.session.service_log_view.service }}</code>
+        </h3>
+    </div>
+    <div class="card-body">
+        <pre class="evidence-block" style="max-height: 250px;">{{ request.session.service_log_view.logs }}</pre>
+    </div>
+</div>
+{% endif %}
+
+<!-- Services Status Table -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Systemd Daemon Status on {{ selected_server.hostname }}</h3>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Service Name</th>
+                    <th>State</th>
+                    <th>Installed / Discovered</th>
+                    <th>Safe Operator Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in services %}
+                <tr>
+                    <td>
+                        <strong style="font-family: var(--font-mono); font-size: 14px; color: var(--text-heading);">
+                            {{ s.service_name }}
+                        </strong>
+                        <div style="font-size: 11.5px; color: var(--text-secondary);">
+                            {% if s.service_name == 'nginx' %}Web Reverse Proxy & HTTP Server
+                            {% elif s.service_name == 'ssh' or s.service_name == 'sshd' %}OpenSSH Remote Shell Daemon
+                            {% elif s.service_name == 'docker' %}OCI Container Runtime Engine
+                            {% elif s.service_name == 'mysql' %}MySQL / MariaDB Relational Database
+                            {% elif s.service_name == 'postgresql' %}PostgreSQL Database Server
+                            {% else %}System Service Daemon{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {% if s.status == 'ACTIVE' %}badge-success{% elif s.status == 'FAILED' %}badge-danger{% elif s.status == 'INACTIVE' %}badge-warning{% else %}badge-secondary{% endif %}">
+                            {{ s.status }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if s.status == 'NOT_FOUND' %}
+                        <span style="color: var(--text-secondary);">Not Installed</span>
+                        {% else %}
+                        <span style="color: var(--success); font-weight: 600;">Installed</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <!-- Check Status Form -->
+                            <form method="POST" action="{% url 'service_action' %}" style="display: inline;">
+                                {% csrf_token %}
+                                <input type="hidden" name="service_name" value="{{ s.service_name }}">
+                                <input type="hidden" name="server_id" value="{{ selected_server.id }}">
+                                <input type="hidden" name="action" value="check">
+                                <button type="submit" class="btn btn-secondary btn-sm">Check Status</button>
+                            </form>
+
+                            <!-- Collect Logs Form -->
+                            <form method="POST" action="{% url 'service_action' %}" style="display: inline;">
+                                {% csrf_token %}
+                                <input type="hidden" name="service_name" value="{{ s.service_name }}">
+                                <input type="hidden" name="server_id" value="{{ selected_server.id }}">
+                                <input type="hidden" name="action" value="logs">
+                                <button type="submit" class="btn btn-secondary btn-sm">Collect Logs</button>
+                            </form>
+
+                            <!-- Restart Service Form (Operator/Admin only) -->
+                            {% if user_can_remediate and s.status != 'NOT_FOUND' %}
+                            <form method="POST" action="{% url 'service_action' %}" style="display: inline;"
+                                  onsubmit="return confirm('Execute safe service restart for {{ s.service_name }}?');">
+                                {% csrf_token %}
+                                <input type="hidden" name="service_name" value="{{ s.service_name }}">
+                                <input type="hidden" name="server_id" value="{{ selected_server.id }}">
+                                <input type="hidden" name="action" value="restart">
+                                <button type="submit" class="btn btn-warning btn-sm">Restart Service</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                        No services found. Interrogate node or check systemd.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

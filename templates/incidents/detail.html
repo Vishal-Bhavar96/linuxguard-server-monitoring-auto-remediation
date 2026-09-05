@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Incident #{{ incident.id }} - {{ incident.title }}{% endblock %}
+{% block breadcrumb %}<a href="{% url 'incident_list' %}">Incidents</a> / Incident #{{ incident.id }}{% endblock %}
+
+{% block content %}
+<!-- Incident Title Header -->
+<div class="card">
+    <div class="card-body" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div>
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                <span class="badge {% if incident.severity == 'CRITICAL' %}badge-danger{% elif incident.severity == 'HIGH' %}badge-warning{% elif incident.severity == 'MEDIUM' %}badge-info{% else %}badge-secondary{% endif %}" style="font-size: 13px; padding: 4px 10px;">
+                    {{ incident.severity }} SEVERITY
+                </span>
+                <span class="badge {% if incident.status == 'OPEN' %}badge-danger{% elif incident.status == 'INVESTIGATING' %}badge-warning{% elif incident.status == 'RESOLVED' %}badge-success{% else %}badge-secondary{% endif %}" style="font-size: 13px; padding: 4px 10px;">
+                    STATUS: {{ incident.get_status_display }}
+                </span>
+                <span class="badge badge-secondary" style="font-size: 13px;">
+                    CATEGORY: {{ incident.get_category_display }}
+                </span>
+            </div>
+            <h2>{{ incident.title }}</h2>
+            <p style="color: var(--text-secondary); margin: 0;">
+                Host: <strong>{{ incident.server.hostname }}</strong> (<code>{{ incident.server.ip_address }}</code>) |
+                Detected: {{ incident.detected_at|date:"Y-m-d H:i:s" }} ({{ incident.detected_at|timesince }} ago)
+                {% if incident.resolved_at %} | Resolved: {{ incident.resolved_at|date:"Y-m-d H:i:s" }}{% endif %}
+            </p>
+        </div>
+
+        <!-- Incident Status Update Form -->
+        {% if user_can_remediate %}
+        <form method="POST" action="{% url 'incident_update_status' incident_id=incident.id %}" style="display: flex; gap: 0.5rem; align-items: center;">
+            {% csrf_token %}
+            <select name="status" class="form-select" style="width: 170px;">
+                <option value="OPEN" {% if incident.status == 'OPEN' %}selected{% endif %}>Open</option>
+                <option value="INVESTIGATING" {% if incident.status == 'INVESTIGATING' %}selected{% endif %}>Investigating</option>
+                <option value="RESOLVED" {% if incident.status == 'RESOLVED' %}selected{% endif %}>Resolved</option>
+                <option value="DISMISSED" {% if incident.status == 'DISMISSED' %}selected{% endif %}>Dismissed</option>
+            </select>
+            <button type="submit" class="btn btn-blue btn-sm">Update Status</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Root Cause Diagnostic Reasoning Engine Output -->
+<div class="root-cause-card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 class="root-cause-title">Automated Root Cause Diagnosis</h3>
+        <div class="confidence-meter">
+            <span>Diagnostic Confidence:</span>
+            <span class="badge badge-info" style="font-size: 13px; padding: 4px 10px;">{{ incident.confidence|floatformat:0 }}%</span>
+        </div>
+    </div>
+
+    <div style="margin: 0.5rem 0; font-size: 14.5px; font-weight: 600; color: var(--text-heading);">
+        Probable Cause: <span style="color: var(--primary);">{{ incident.probable_cause|default:"Telemetry anomaly under automated evaluation." }}</span>
+    </div>
+
+    <!-- Diagnostic Evidence Block -->
+    {% if incident.evidence %}
+    <div style="margin-top: 1rem;">
+        <strong style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Diagnostic Evidence Collected:</strong>
+        <pre class="evidence-block">{{ incident.evidence }}</pre>
+    </div>
+    {% endif %}
+
+    <!-- Actionable Remediation Guidance -->
+    {% if incident.recommendation %}
+    <div class="recommendation-box">
+        <strong style="font-size: 13px; display: block; margin-bottom: 0.35rem;">Actionable Remediation Guidance:</strong>
+        <div style="white-space: pre-wrap; font-size: 13px;">{{ incident.recommendation }}</div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Remediation Actions Section -->
+<div class="grid-2-1">
+    <!-- Remediations History on this Incident -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Remediation Action History</h3>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Action Name</th>
+                        <th>Status</th>
+                        <th>Approved By</th>
+                        <th>Execution Log</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for act in remediation_actions %}
+                    <tr>
+                        <td><strong>{{ act.action_name }}</strong></td>
+                        <td>
+                            <span class="badge {% if act.status == 'SUCCESS' %}badge-success{% elif act.status == 'FAILED' %}badge-danger{% elif act.status == 'PENDING_APPROVAL' %}badge-warning{% else %}badge-info{% endif %}">
+                                {{ act.get_status_display }}
+                            </span>
+                        </td>
+                        <td>{{ act.approved_by.username|default:"Automated Engine" }}</td>
+                        <td>
+                            {% if act.result %}
+                            <pre class="evidence-block" style="max-height: 120px; font-size: 11px; margin: 0;">{{ act.result }}</pre>
+                            {% else %}
+                            <span style="color: var(--text-secondary); font-size: 12px;">Pending execution</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                            No remediation actions triggered yet. Use the form on the right to initiate safe self-healing.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Trigger Safe Remediation Form -->
+    {% if user_can_remediate %}
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Initiate Safe Remediation</h3>
+        </div>
+        <form method="POST" action="{% url 'remediation_trigger' %}">
+            {% csrf_token %}
+            <input type="hidden" name="incident_id" value="{{ incident.id }}">
+            <div class="card-body">
+                <p style="font-size: 12px; color: var(--text-secondary);">
+                    Only predefined, allowlisted Linux operations can be executed. Unsafe commands are strictly blocked.
+                </p>
+
+                <div class="form-group">
+                    <label class="form-label">Remediation Operation</label>
+                    {{ remediation_form.action_type }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Target Service</label>
+                    {{ remediation_form.service_name }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Operational Justification</label>
+                    {{ remediation_form.reason }}
+                </div>
+            </div>
+            <div class="card-footer" style="display: flex; justify-content: flex-end;">
+                <button type="submit" class="btn btn-warning">Execute Safe Remediation</button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

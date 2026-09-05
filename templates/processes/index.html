@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Process Monitor{% endblock %}
+{% block breadcrumb %}Process Monitoring & Resource Consumers{% endblock %}
+
+{% block content %}
+<!-- Filter & Sort Bar -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-body" style="padding: 1rem;">
+        <form method="GET" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 220px;">
+                <label class="form-label">Monitored Host</label>
+                <select name="server_id" class="form-select">
+                    {% for s in servers %}
+                    <option value="{{ s.id }}" {% if selected_server.id == s.id %}selected{% endif %}>
+                        {{ s.hostname }} ({{ s.ip_address }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div style="flex: 1; min-width: 220px;">
+                <label class="form-label">Sort Order</label>
+                <select name="sort_by" class="form-select">
+                    <option value="cpu" {% if sort_by == 'cpu' %}selected{% endif %}>CPU Utilization (High to Low)</option>
+                    <option value="memory" {% if sort_by == 'memory' %}selected{% endif %}>Memory Usage (High to Low)</option>
+                    <option value="pid" {% if sort_by == 'pid' %}selected{% endif %}>Process ID (PID)</option>
+                    <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Process Name</option>
+                </select>
+            </div>
+
+            <div style="flex: 1.5; min-width: 250px;">
+                <label class="form-label">Search / Filter</label>
+                <input type="text" name="search" class="form-control" value="{{ search_query }}" placeholder="Filter by process name or user...">
+            </div>
+
+            <div>
+                <button type="submit" class="btn btn-blue">Apply Filter</button>
+                <a href="{% url 'processes' %}" class="btn btn-secondary">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Process Table -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Top Active Processes on {{ selected_server.hostname }}</h3>
+        <span style="font-size: 12px; color: var(--text-secondary);">
+            Enumerated via <code>psutil.process_iter()</code>
+        </span>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>PID</th>
+                    <th>Process Name</th>
+                    <th>User</th>
+                    <th>CPU Usage (%)</th>
+                    <th>Memory Usage (%)</th>
+                    <th>State</th>
+                    <th>Diagnostic Tag</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in processes %}
+                <tr>
+                    <td><strong>{{ p.pid }}</strong></td>
+                    <td style="font-family: var(--font-mono); font-weight: 600; color: var(--text-heading);">
+                        {{ p.name }}
+                    </td>
+                    <td><code>{{ p.username }}</code></td>
+                    <td style="min-width: 140px;">
+                        <div style="display: flex; justify-content: space-between; font-weight: 600; font-size: 12px;">
+                            <span>{{ p.cpu_percent }}%</span>
+                        </div>
+                        <div class="progress-container" style="height: 6px;">
+                            <div class="progress-bar {% if p.cpu_percent >= 70 %}progress-danger{% elif p.cpu_percent >= 40 %}progress-warning{% else %}progress-success{% endif %}"
+                                 style="width: {{ p.cpu_percent }}%;"></div>
+                        </div>
+                    </td>
+                    <td style="min-width: 140px;">
+                        <div style="display: flex; justify-content: space-between; font-weight: 600; font-size: 12px;">
+                            <span>{{ p.memory_percent }}%</span>
+                        </div>
+                        <div class="progress-container" style="height: 6px;">
+                            <div class="progress-bar {% if p.memory_percent >= 50 %}progress-danger{% elif p.memory_percent >= 25 %}progress-warning{% else %}progress-success{% endif %}"
+                                 style="width: {{ p.memory_percent }}%;"></div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {% if p.status == 'running' %}badge-success{% elif p.status == 'sleeping' %}badge-secondary{% else %}badge-warning{% endif %}">
+                            {{ p.status }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if p.cpu_percent >= 70 %}
+                        <span class="badge badge-danger">High CPU Consumer</span>
+                        {% elif p.memory_percent >= 50 %}
+                        <span class="badge badge-warning">High Memory Footprint</span>
+                        {% else %}
+                        <span class="badge badge-secondary">Nominal</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                        No processes match the given criteria.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

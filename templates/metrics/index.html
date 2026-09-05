@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+
+{% block title %}System Telemetry & Metrics{% endblock %}
+{% block breadcrumb %}Telemetry & Metrics{% endblock %}
+
+{% block content %}
+<!-- Host Filter -->
+<div class="form-inline-filter" style="justify-content: space-between;">
+    <form method="GET" style="display: flex; gap: 0.75rem; align-items: center;">
+        <label class="form-label" style="margin: 0;" for="host_select">Server:</label>
+        <select name="server_id" id="host_select" class="form-select" style="width: 280px;" onchange="this.form.submit()">
+            {% for s in servers %}
+            <option value="{{ s.id }}" {% if selected_server.id == s.id %}selected{% endif %}>
+                {{ s.hostname }} ({{ s.ip_address }})
+            </option>
+            {% endfor %}
+        </select>
+        <noscript><button type="submit" class="btn btn-secondary btn-sm">Filter</button></noscript>
+    </form>
+    <div>
+        <span style="font-size: 13px; color: var(--text-secondary);">
+            Telemetry collected via real <code>psutil</code> & safe Linux kernel syscalls.
+        </span>
+    </div>
+</div>
+
+<!-- Aggregated Statistical Baseline Cards -->
+<div class="grid-4">
+    <div class="kpi-card">
+        <span class="kpi-label">Average CPU</span>
+        <span class="kpi-value">{{ agg.avg_cpu|default:0|floatformat:1 }}%</span>
+        <span class="kpi-subtext">Peak Load: <strong>{{ agg.max_cpu|default:0|floatformat:1 }}%</strong></span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">Average RAM</span>
+        <span class="kpi-value">{{ agg.avg_ram|default:0|floatformat:1 }}%</span>
+        <span class="kpi-subtext">Peak RAM: <strong>{{ agg.max_ram|default:0|floatformat:1 }}%</strong></span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">Storage Usage</span>
+        <span class="kpi-value">{{ agg.avg_disk|default:0|floatformat:1 }}%</span>
+        <span class="kpi-subtext">Max Peak: <strong>{{ agg.max_disk|default:0|floatformat:1 }}%</strong></span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">Network Throughput</span>
+        <span class="kpi-value" style="font-size: 1.25rem;">{{ network_report.bytes_sent_mb }} MB Sent</span>
+        <span class="kpi-subtext">{{ network_report.bytes_recv_mb }} MB Received</span>
+    </div>
+</div>
+
+<!-- Filesystem & Partitions Analysis (Disk Monitor Engine) -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Filesystem Partitions & Storage Health</h3>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Device</th>
+                    <th>Mountpoint</th>
+                    <th>Filesystem</th>
+                    <th>Total Space</th>
+                    <th>Used</th>
+                    <th>Free</th>
+                    <th>Utilization (%)</th>
+                    <th>Health</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for part in disk_report.partitions %}
+                <tr>
+                    <td><code>{{ part.device }}</code></td>
+                    <td><strong>{{ part.mountpoint }}</strong></td>
+                    <td>{{ part.fstype }}</td>
+                    <td>{{ part.total_gb }} GB</td>
+                    <td>{{ part.used_gb }} GB</td>
+                    <td>{{ part.free_gb }} GB</td>
+                    <td style="min-width: 140px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 600; margin-bottom: 2px;">
+                            <span>{{ part.percent }}%</span>
+                        </div>
+                        <div class="progress-container" style="height: 8px;">
+                            <div class="progress-bar {% if part.percent >= 90 %}progress-danger{% elif part.percent >= 80 %}progress-warning{% else %}progress-success{% endif %}"
+                                 style="width: {{ part.percent }}%;"></div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {% if part.status == 'CRITICAL' %}badge-danger{% elif part.status == 'WARNING' %}badge-warning{% else %}badge-success{% endif %}">
+                            {{ part.status }}
+                        </span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                        No partition data reported.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Network Interfaces & Socket Stats -->
+<div class="grid-2">
+    <!-- Interfaces Table -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Network Interfaces (ip / ifaddrs)</h3>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Interface</th>
+                        <th>State</th>
+                        <th>Speed</th>
+                        <th>IP Address</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for iface in network_report.interfaces %}
+                    <tr>
+                        <td><strong>{{ iface.name }}</strong></td>
+                        <td>
+                            <span class="badge {% if iface.is_up %}badge-success{% else %}badge-secondary{% endif %}">
+                                {% if iface.is_up %}UP{% else %}DOWN{% endif %}
+                            </span>
+                        </td>
+                        <td>{{ iface.speed_mbps }} Mbps</td>
+                        <td>
+                            {% for addr in iface.addresses %}
+                            <div><code>{{ addr.address }}</code></div>
+                            {% empty %}
+                            <span style="color: var(--text-secondary);">-</span>
+                            {% endfor %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                            No network interfaces discovered.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Active Connections Summary -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Socket & Connection States (ss / netstat)</h3>
+        </div>
+        <div class="card-body">
+            <div class="grid-2" style="margin-bottom: 0;">
+                <div class="kpi-card" style="padding: 1rem;">
+                    <span class="kpi-label">Established TCP</span>
+                    <span class="kpi-value" style="font-size: 1.5rem;">{{ network_report.connection_counts.ESTABLISHED }}</span>
+                </div>
+                <div class="kpi-card" style="padding: 1rem;">
+                    <span class="kpi-label">Listening Ports</span>
+                    <span class="kpi-value" style="font-size: 1.5rem;">{{ network_report.connection_counts.LISTEN }}</span>
+                </div>
+                <div class="kpi-card" style="padding: 1rem;">
+                    <span class="kpi-label">Time Wait</span>
+                    <span class="kpi-value" style="font-size: 1.5rem;">{{ network_report.connection_counts.TIME_WAIT }}</span>
+                </div>
+                <div class="kpi-card" style="padding: 1rem;">
+                    <span class="kpi-label">Total Sockets</span>
+                    <span class="kpi-value" style="font-size: 1.5rem;">{{ network_report.connection_counts.TOTAL }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Historical Telemetry Log Table -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Telemetry Time-Series Records for {{ selected_server.hostname }}</h3>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>CPU Utilization (%)</th>
+                    <th>RAM Memory (%)</th>
+                    <th>Disk Partition (%)</th>
+                    <th>Load Average (1m, 5m, 15m)</th>
+                    <th>Network Sent</th>
+                    <th>Network Recv</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in metrics %}
+                <tr>
+                    <td>{{ m.timestamp|date:"Y-m-d H:i:s" }}</td>
+                    <td style="min-width: 120px;">
+                        <span style="font-weight: 600;">{{ m.cpu_usage }}%</span>
+                        <div class="progress-container" style="height: 6px; width: 100%; margin-top: 3px;">
+                            <div class="progress-bar {% if m.cpu_usage >= 85 %}progress-danger{% else %}progress-success{% endif %}" style="width: {{ m.cpu_usage }}%;"></div>
+                        </div>
+                    </td>
+                    <td style="min-width: 120px;">
+                        <span style="font-weight: 600;">{{ m.memory_usage }}%</span>
+                        <div class="progress-container" style="height: 6px; width: 100%; margin-top: 3px;">
+                            <div class="progress-bar {% if m.memory_usage >= 85 %}progress-danger{% else %}progress-success{% endif %}" style="width: {{ m.memory_usage }}%;"></div>
+                        </div>
+                    </td>
+                    <td>{{ m.disk_usage }}%</td>
+                    <td><code>{{ m.load_average }}</code></td>
+                    <td>{{ m.network_sent|filesizeformat }}</td>
+                    <td>{{ m.network_received|filesizeformat }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                        No telemetry logs available.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if metrics.has_other_pages %}
+    <div class="card-footer pagination-area">
+        <span>Showing page {{ metrics.number }} of {{ metrics.paginator.num_pages }}</span>
+        <div class="pagination-links">
+            {% if metrics.has_previous %}
+            <a href="?page={{ metrics.previous_page_number }}{% if selected_server %}&server_id={{ selected_server.id }}{% endif %}" class="page-link">&laquo; Prev</a>
+            {% endif %}
+            <span class="page-link active">{{ metrics.number }}</span>
+            {% if metrics.has_next %}
+            <a href="?page={{ metrics.next_page_number }}{% if selected_server %}&server_id={{ selected_server.id }}{% endif %}" class="page-link">Next &raquo;</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

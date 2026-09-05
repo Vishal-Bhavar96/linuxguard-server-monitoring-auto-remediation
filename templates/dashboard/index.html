@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+
+{% block title %}Operations Dashboard{% endblock %}
+{% block breadcrumb %}Real-Time Operations Command Center{% endblock %}
+
+{% block content %}
+<!-- Top KPI Summary Cards -->
+<div class="grid-4">
+    <div class="kpi-card">
+        <span class="kpi-label">Total Servers</span>
+        <span class="kpi-value">{{ total_servers }}</span>
+        <span class="kpi-subtext">Monitored Host Nodes</span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">Healthy Nodes</span>
+        <span class="kpi-value" style="color: var(--success);">{{ healthy_servers }}</span>
+        <span class="kpi-subtext">Operating Normality</span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">Active Incidents</span>
+        <span class="kpi-value" style="color: {% if active_incidents_count %}var(--warning){% else %}var(--text-heading){% endif %};">
+            {{ active_incidents_count }}
+        </span>
+        <span class="kpi-subtext">Open & Investigating</span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">Critical Incidents</span>
+        <span class="kpi-value" style="color: {% if critical_incidents_count %}var(--critical){% else %}var(--text-heading){% endif %};">
+            {{ critical_incidents_count }}
+        </span>
+        <span class="kpi-subtext">Immediate Attention</span>
+    </div>
+</div>
+
+<!-- Server Filter & Quick Switcher -->
+<div class="form-inline-filter" style="justify-content: space-between;">
+    <form method="GET" action="{% url 'dashboard' %}" style="display: flex; gap: 0.75rem; align-items: center;">
+        <label class="form-label" style="margin: 0;" for="server_id">Active Host:</label>
+        <select name="server_id" id="server_id" class="form-select" style="width: 280px;" onchange="this.form.submit()">
+            {% for s in servers %}
+            <option value="{{ s.id }}" {% if current_server.id == s.id %}selected{% endif %}>
+                {{ s.hostname }} ({{ s.ip_address }}) [{{ s.get_status_display }}]
+            </option>
+            {% endfor %}
+        </select>
+        <noscript>
+            <button type="submit" class="btn btn-secondary btn-sm">Switch Host</button>
+        </noscript>
+    </form>
+
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <span class="badge {% if current_server.status == 'ONLINE' %}badge-success{% elif current_server.status == 'CRITICAL' %}badge-danger{% else %}badge-warning{% endif %}">
+            {{ current_server.get_status_display }}
+        </span>
+        <span style="font-size: 12px; color: var(--text-secondary);">
+            OS: {{ current_server.operating_system }} | Last seen: {{ current_server.last_seen|date:"H:i:s" }}
+        </span>
+    </div>
+</div>
+
+<!-- Real-Time Hardware Telemetry Gauges (Pure CSS) -->
+<div class="grid-3">
+    <!-- CPU Usage Card -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">CPU Utilization</h3>
+            <span class="badge {% if latest_metric.cpu_usage >= 95 or live_telemetry.cpu.cpu_percent >= 95 %}badge-danger{% elif latest_metric.cpu_usage >= 85 or live_telemetry.cpu.cpu_percent >= 85 %}badge-warning{% else %}badge-success{% endif %}">
+                {% if live_telemetry %}{{ live_telemetry.cpu.cpu_percent }}%{% elif latest_metric %}{{ latest_metric.cpu_usage }}%{% else %}0%{% endif %}
+            </span>
+        </div>
+        <div class="card-body">
+            <div class="metric-row">
+                <div class="metric-header">
+                    <span>Overall Processor Load</span>
+                    <span>{% if live_telemetry %}{{ live_telemetry.cpu.cpu_percent }}%{% elif latest_metric %}{{ latest_metric.cpu_usage }}%{% else %}0%{% endif %}</span>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar {% if live_telemetry.cpu.cpu_percent >= 95 or latest_metric.cpu_usage >= 95 %}progress-danger{% elif live_telemetry.cpu.cpu_percent >= 85 or latest_metric.cpu_usage >= 85 %}progress-warning{% else %}progress-success{% endif %}"
+                         style="width: {% if live_telemetry %}{{ live_telemetry.cpu.cpu_percent }}{% elif latest_metric %}{{ latest_metric.cpu_usage }}{% else %}0{% endif %}%;">
+                    </div>
+                </div>
+            </div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 0.75rem;">
+                Load Average: <strong>{% if live_telemetry %}{{ live_telemetry.load_average.formatted }}{% elif latest_metric %}{{ latest_metric.load_average }}{% else %}0.00, 0.00, 0.00{% endif %}</strong>
+            </div>
+        </div>
+        <div class="card-footer">
+            <a href="{% url 'server_metrics' server_id=current_server.id %}" style="font-size: 12px; font-weight: 600;">View Detailed Metrics &rarr;</a>
+        </div>
+    </div>
+
+    <!-- RAM Memory Card -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Memory Allocation (RAM)</h3>
+            <span class="badge {% if latest_metric.memory_usage >= 95 or live_telemetry.memory.memory_percent >= 95 %}badge-danger{% elif latest_metric.memory_usage >= 85 or live_telemetry.memory.memory_percent >= 85 %}badge-warning{% else %}badge-success{% endif %}">
+                {% if live_telemetry %}{{ live_telemetry.memory.memory_percent }}%{% elif latest_metric %}{{ latest_metric.memory_usage }}%{% else %}0%{% endif %}
+            </span>
+        </div>
+        <div class="card-body">
+            <div class="metric-row">
+                <div class="metric-header">
+                    <span>Physical Memory (RAM)</span>
+                    <span>{% if live_telemetry %}{{ live_telemetry.memory.memory_percent }}%{% elif latest_metric %}{{ latest_metric.memory_usage }}%{% else %}0%{% endif %}</span>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar {% if live_telemetry.memory.memory_percent >= 95 or latest_metric.memory_usage >= 95 %}progress-danger{% elif live_telemetry.memory.memory_percent >= 85 or latest_metric.memory_usage >= 85 %}progress-warning{% else %}progress-success{% endif %}"
+                         style="width: {% if live_telemetry %}{{ live_telemetry.memory.memory_percent }}{% elif latest_metric %}{{ latest_metric.memory_usage }}{% else %}0{% endif %}%;">
+                    </div>
+                </div>
+            </div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 0.75rem;">
+                {% if live_telemetry %}
+                Used: <strong>{{ live_telemetry.memory.used_mb }} MB</strong> / Total: <strong>{{ live_telemetry.memory.total_mb }} MB</strong>
+                {% else %}
+                Memory utilization monitored via periodic polling.
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-footer">
+            <a href="{% url 'server_processes' server_id=current_server.id %}" style="font-size: 12px; font-weight: 600;">View Top Processes &rarr;</a>
+        </div>
+    </div>
+
+    <!-- Disk Space Card -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Storage Partition (Disk)</h3>
+            <span class="badge {% if latest_metric.disk_usage >= 90 or live_telemetry.disk.disk_percent >= 90 %}badge-danger{% elif latest_metric.disk_usage >= 80 or live_telemetry.disk.disk_percent >= 80 %}badge-warning{% else %}badge-success{% endif %}">
+                {% if live_telemetry %}{{ live_telemetry.disk.disk_percent }}%{% elif latest_metric %}{{ latest_metric.disk_usage }}%{% else %}0%{% endif %}
+            </span>
+        </div>
+        <div class="card-body">
+            <div class="metric-row">
+                <div class="metric-header">
+                    <span>Root Partition [/]</span>
+                    <span>{% if live_telemetry %}{{ live_telemetry.disk.disk_percent }}%{% elif latest_metric %}{{ latest_metric.disk_usage }}%{% else %}0%{% endif %}</span>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar {% if live_telemetry.disk.disk_percent >= 90 or latest_metric.disk_usage >= 90 %}progress-danger{% elif live_telemetry.disk.disk_percent >= 80 or latest_metric.disk_usage >= 80 %}progress-warning{% else %}progress-success{% endif %}"
+                         style="width: {% if live_telemetry %}{{ live_telemetry.disk.disk_percent }}{% elif latest_metric %}{{ latest_metric.disk_usage }}{% else %}0{% endif %}%;">
+                    </div>
+                </div>
+            </div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 0.75rem;">
+                {% if live_telemetry %}
+                Used: <strong>{{ live_telemetry.disk.used_gb }} GB</strong> / Free: <strong>{{ live_telemetry.disk.free_gb }} GB</strong>
+                {% else %}
+                Partition bounds checked periodically.
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-footer">
+            <a href="{% url 'metrics' %}" style="font-size: 12px; font-weight: 600;">Filesystem Breakdown &rarr;</a>
+        </div>
+    </div>
+</div>
+
+<!-- Active Incidents & Monitored Services Grid -->
+<div class="grid-2-1">
+    <!-- Recent Incidents Table -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Recent System Incidents & Root Causes</h3>
+            <a href="{% url 'incident_list' %}" class="btn btn-secondary btn-sm">All Incidents</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Incident Title</th>
+                        <th>Host</th>
+                        <th>Status</th>
+                        <th>Detected</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inc in recent_incidents %}
+                    <tr>
+                        <td>
+                            <span class="badge {% if inc.severity == 'CRITICAL' %}badge-danger{% elif inc.severity == 'HIGH' %}badge-warning{% elif inc.severity == 'MEDIUM' %}badge-info{% else %}badge-secondary{% endif %}">
+                                {{ inc.severity }}
+                            </span>
+                        </td>
+                        <td>
+                            <a href="{% url 'incident_detail' incident_id=inc.id %}" style="font-weight: 600; color: var(--text-heading);">
+                                {{ inc.title|truncatechars:45 }}
+                            </a>
+                            <div style="font-size: 11.5px; color: var(--text-secondary);">
+                                {{ inc.probable_cause|truncatechars:60 }}
+                            </div>
+                        </td>
+                        <td>{{ inc.server.hostname }}</td>
+                        <td>
+                            <span class="badge {% if inc.status == 'OPEN' %}badge-danger{% elif inc.status == 'INVESTIGATING' %}badge-warning{% elif inc.status == 'RESOLVED' %}badge-success{% else %}badge-secondary{% endif %}">
+                                {{ inc.get_status_display }}
+                            </span>
+                        </td>
+                        <td>{{ inc.detected_at|timesince }} ago</td>
+                        <td>
+                            <a href="{% url 'incident_detail' incident_id=inc.id %}" class="btn btn-secondary btn-sm">Investigate</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                            No active incidents detected. All monitored systems operating nominally.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Node Service Health Summary -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Services on {{ current_server.hostname }}</h3>
+            <a href="{% url 'services' %}" class="btn btn-secondary btn-sm">Manage</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Service</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in services %}
+                    <tr>
+                        <td style="font-weight: 600; font-family: var(--font-mono);">{{ s.service_name }}</td>
+                        <td>
+                            <span class="badge {% if s.status == 'ACTIVE' %}badge-success{% elif s.status == 'FAILED' %}badge-danger{% elif s.status == 'INACTIVE' %}badge-warning{% else %}badge-secondary{% endif %}">
+                                {{ s.get_status_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <form method="POST" action="{% url 'service_action' %}" style="display:inline;">
+                                {% csrf_token %}
+                                <input type="hidden" name="service_name" value="{{ s.service_name }}">
+                                <input type="hidden" name="server_id" value="{{ current_server.id }}">
+                                <input type="hidden" name="action" value="check">
+                                <button type="submit" class="btn btn-secondary btn-sm" title="Interrogate Service">Check</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                            No services registered. Click 'Sample Telemetry' to interrogate daemons.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Security Events & Remediation Trail Grid -->
+<div class="grid-2">
+    <!-- Security Events Card -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Recent Security Events (SSH Alerts)</h3>
+            <a href="{% url 'security' %}" class="btn btn-secondary btn-sm">Security Feed</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Source IP</th>
+                        <th>Description</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sec in recent_security_events %}
+                    <tr>
+                        <td>
+                            <span class="badge {% if sec.severity == 'CRITICAL' %}badge-danger{% elif sec.severity == 'HIGH' %}badge-warning{% else %}badge-info{% endif %}">
+                                {{ sec.get_event_type_display }}
+                            </span>
+                        </td>
+                        <td><code>{{ sec.source_ip|default:"Local" }}</code></td>
+                        <td style="font-size: 12px;">{{ sec.description|truncatechars:65 }}</td>
+                        <td style="white-space: nowrap;">{{ sec.timestamp|timesince }} ago</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                            No suspicious security events or SSH brute force patterns detected.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Recent Remediation Actions Card -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Recent Remediation Executions</h3>
+            <a href="{% url 'remediation_list' %}" class="btn btn-secondary btn-sm">Action History</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Action</th>
+                        <th>Status</th>
+                        <th>Approved By</th>
+                        <th>Executed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rem in recent_remediations %}
+                    <tr>
+                        <td style="font-weight: 600;">{{ rem.action_name|truncatechars:35 }}</td>
+                        <td>
+                            <span class="badge {% if rem.status == 'SUCCESS' %}badge-success{% elif rem.status == 'FAILED' %}badge-danger{% elif rem.status == 'PENDING_APPROVAL' %}badge-warning{% else %}badge-info{% endif %}">
+                                {{ rem.get_status_display }}
+                            </span>
+                        </td>
+                        <td>{{ rem.approved_by.username|default:"Auto-Remediation" }}</td>
+                        <td>{{ rem.executed_at|default:rem.incident.detected_at|timesince }} ago</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                            No remediation actions registered.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

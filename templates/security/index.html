@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Security & Authentication Monitoring{% endblock %}
+{% block breadcrumb %}Security Events & SSH Intrusion Detection{% endblock %}
+
+{% block content %}
+<!-- Security Stats KPI -->
+<div class="grid-3">
+    <div class="kpi-card">
+        <span class="kpi-label">SSH Brute Force Alerts</span>
+        <span class="kpi-value" style="color: var(--critical);">{{ brute_force_count }}</span>
+        <span class="kpi-subtext">Repeated failed SSH attempts</span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">High Severity Incidents</span>
+        <span class="kpi-value" style="color: var(--warning);">{{ high_severity_count }}</span>
+        <span class="kpi-subtext">Security relevant anomalies</span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">Intrusion Policy</span>
+        <span class="kpi-value" style="font-size: 1.35rem; color: var(--primary);">Passive Alerting</span>
+        <span class="kpi-subtext">Alert creation without disruptive auto-blocking</span>
+    </div>
+</div>
+
+<div class="grid-2-1">
+    <!-- Security Events Feed Table -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Security Event Feed & Authentication Logs</h3>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Event Type</th>
+                        <th>Host Node</th>
+                        <th>Source IP</th>
+                        <th>Description</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ev in events %}
+                    <tr>
+                        <td>
+                            <span class="badge {% if ev.severity == 'CRITICAL' %}badge-danger{% elif ev.severity == 'HIGH' %}badge-warning{% else %}badge-info{% endif %}">
+                                {{ ev.severity }}
+                            </span>
+                        </td>
+                        <td><strong>{{ ev.get_event_type_display }}</strong></td>
+                        <td>{{ ev.server.hostname }}</td>
+                        <td><code>{{ ev.source_ip|default:"Local System" }}</code></td>
+                        <td style="font-size: 12.5px;">{{ ev.description }}</td>
+                        <td>{{ ev.timestamp|date:"M d, H:i:s" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                            No security anomalies or SSH brute force events detected.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if events.has_other_pages %}
+        <div class="card-footer pagination-area">
+            <span>Showing page {{ events.number }} of {{ events.paginator.num_pages }}</span>
+            <div class="pagination-links">
+                {% if events.has_previous %}
+                <a href="?page={{ events.previous_page_number }}" class="page-link">&laquo; Prev</a>
+                {% endif %}
+                <span class="page-link active">{{ events.number }}</span>
+                {% if events.has_next %}
+                <a href="?page={{ events.next_page_number }}" class="page-link">Next &raquo;</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Top Suspicious Source IPs (Demonstrating GROUP BY / COUNT) -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Frequent Failed IP Origins</h3>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Source IP</th>
+                        <th>Attempts</th>
+                        <th>Last Seen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ip in top_ips %}
+                    <tr>
+                        <td><code>{{ ip.source_ip }}</code></td>
+                        <td><span class="badge badge-danger">{{ ip.attack_count }} events</span></td>
+                        <td>{{ ip.latest_attack|timesince }} ago</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                            No external offending IPs identified.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

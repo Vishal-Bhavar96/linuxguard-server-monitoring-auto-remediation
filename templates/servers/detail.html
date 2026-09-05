@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}{{ server.hostname }} Details{% endblock %}
+{% block breadcrumb %}<a href="{% url 'server_list' %}">Servers</a> / {{ server.hostname }}{% endblock %}
+
+{% block content %}
+<!-- Server Header -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-body" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div>
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <h2>{{ server.hostname }}</h2>
+                <span class="badge {% if server.status == 'ONLINE' %}badge-success{% elif server.status == 'CRITICAL' %}badge-danger{% else %}badge-warning{% endif %}">
+                    {{ server.get_status_display }}
+                </span>
+                {% if server.is_local %}
+                <span class="badge badge-info">Local Node</span>
+                {% endif %}
+            </div>
+            <p style="color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+                IP: <code>{{ server.ip_address }}</code> | OS: {{ server.operating_system }} | Registered: {{ server.created_at|date:"M d, Y" }}
+            </p>
+        </div>
+
+        <div style="display: flex; gap: 0.5rem;">
+            <a href="{% url 'server_metrics' server_id=server.id %}" class="btn btn-secondary btn-sm">Full Telemetry</a>
+            <a href="{% url 'server_processes' server_id=server.id %}" class="btn btn-secondary btn-sm">Process List</a>
+            <a href="{% url 'server_services' server_id=server.id %}" class="btn btn-secondary btn-sm">Manage Services</a>
+            {% if user_can_approve %}
+            <a href="{% url 'server_edit' server_id=server.id %}" class="btn btn-secondary btn-sm">Edit Node</a>
+            <a href="{% url 'server_delete' server_id=server.id %}" class="btn btn-danger btn-sm">Delete</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Aggregated Metrics Summary (AVG, MAX, MIN demonstration) -->
+<div class="grid-3">
+    <div class="kpi-card">
+        <span class="kpi-label">CPU Average (Historical)</span>
+        <span class="kpi-value">{{ agg_stats.avg_cpu|default:0|floatformat:1 }}%</span>
+        <span class="kpi-subtext">Peak CPU: <strong>{{ agg_stats.max_cpu|default:0|floatformat:1 }}%</strong> | Min: {{ agg_stats.min_cpu|default:0|floatformat:1 }}%</span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">RAM Average (Historical)</span>
+        <span class="kpi-value">{{ agg_stats.avg_ram|default:0|floatformat:1 }}%</span>
+        <span class="kpi-subtext">Peak RAM: <strong>{{ agg_stats.max_ram|default:0|floatformat:1 }}%</strong></span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">Disk Storage Baseline</span>
+        <span class="kpi-value">{{ agg_stats.avg_disk|default:0|floatformat:1 }}%</span>
+        <span class="kpi-subtext">Root mount allocation</span>
+    </div>
+</div>
+
+<!-- Services and Recent Incidents on this Node -->
+<div class="grid-2">
+    <!-- Node Services -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Monitored Services</h3>
+            <a href="{% url 'server_services' server_id=server.id %}" class="btn btn-secondary btn-sm">Manage Services</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Service</th>
+                        <th>State</th>
+                        <th>Checked At</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in services %}
+                    <tr>
+                        <td style="font-weight: 600; font-family: var(--font-mono);">{{ s.service_name }}</td>
+                        <td>
+                            <span class="badge {% if s.status == 'ACTIVE' %}badge-success{% elif s.status == 'FAILED' %}badge-danger{% elif s.status == 'INACTIVE' %}badge-warning{% else %}badge-secondary{% endif %}">
+                                {{ s.get_status_display }}
+                            </span>
+                        </td>
+                        <td>{{ s.checked_at|date:"H:i:s" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                            No services recorded for this node.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Node Incidents -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Incidents & Root Cause Diagnosis</h3>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Incident</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inc in incidents %}
+                    <tr>
+                        <td>
+                            <span class="badge {% if inc.severity == 'CRITICAL' %}badge-danger{% elif inc.severity == 'HIGH' %}badge-warning{% else %}badge-info{% endif %}">
+                                {{ inc.severity }}
+                            </span>
+                        </td>
+                        <td>
+                            <div style="font-weight: 600;">{{ inc.title|truncatechars:40 }}</div>
+                            <div style="font-size: 11.5px; color: var(--text-secondary);">{{ inc.probable_cause|truncatechars:50 }}</div>
+                        </td>
+                        <td>
+                            <span class="badge {% if inc.status == 'RESOLVED' %}badge-success{% elif inc.status == 'OPEN' %}badge-danger{% else %}badge-warning{% endif %}">
+                                {{ inc.get_status_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <a href="{% url 'incident_detail' incident_id=inc.id %}" class="btn btn-secondary btn-sm">Diagnose</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                            No incidents recorded on this node.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Telemetry History Table -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Recent Telemetry Telemetry Log</h3>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>CPU Load</th>
+                    <th>RAM Memory</th>
+                    <th>Disk Storage</th>
+                    <th>Load Average</th>
+                    <th>Network Sent</th>
+                    <th>Network Recv</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in latest_metrics %}
+                <tr>
+                    <td>{{ m.timestamp|date:"Y-m-d H:i:s" }}</td>
+                    <td>
+                        <strong>{{ m.cpu_usage }}%</strong>
+                        <div class="progress-container" style="height: 6px; width: 80px; margin-top: 3px;">
+                            <div class="progress-bar {% if m.cpu_usage >= 85 %}progress-danger{% else %}progress-success{% endif %}" style="width: {{ m.cpu_usage }}%;"></div>
+                        </div>
+                    </td>
+                    <td>
+                        <strong>{{ m.memory_usage }}%</strong>
+                        <div class="progress-container" style="height: 6px; width: 80px; margin-top: 3px;">
+                            <div class="progress-bar {% if m.memory_usage >= 85 %}progress-danger{% else %}progress-success{% endif %}" style="width: {{ m.memory_usage }}%;"></div>
+                        </div>
+                    </td>
+                    <td>{{ m.disk_usage }}%</td>
+                    <td><code>{{ m.load_average }}</code></td>
+                    <td>{{ m.network_sent|filesizeformat }}</td>
+                    <td>{{ m.network_received|filesizeformat }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                        No metrics recorded yet. Trigger monitoring sampling or run management command.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

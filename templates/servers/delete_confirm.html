@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm Server Deletion{% endblock %}
+{% block breadcrumb %}<a href="{% url 'server_list' %}">Servers</a> / Delete Server{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 500px; margin: 2rem auto; border-color: var(--critical-border);">
+    <div class="card-header" style="background-color: var(--critical-bg);">
+        <h3 class="card-title" style="color: var(--critical);">Confirm Server Deletion</h3>
+    </div>
+    <form method="POST">
+        {% csrf_token %}
+        <div class="card-body">
+            <p>Are you sure you want to remove <strong>{{ server.hostname }}</strong> (<code>{{ server.ip_address }}</code>) from LinuxGuard monitoring?</p>
+            <p style="font-size: 12px; color: var(--text-secondary);">
+                This will delete all historical telemetry, process snapshots, and incident relations for this server.
+            </p>
+        </div>
+        <div class="card-footer" style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+            <a href="{% url 'server_detail' server_id=server.id %}" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-danger">Confirm Delete</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}Auto-Remediation & Self-Healing Engine{% endblock %}
+{% block breadcrumb %}Auto-Remediation & Action History{% endblock %}
+
+{% block content %}
+<!-- Header Overview -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <div>
+        <h2>Controlled Remediation & Self-Healing</h2>
+        <p style="color: var(--text-secondary); margin: 0;">
+            Predefined allowlisted Linux recovery operations with automatic post-execution health verification.
+        </p>
+    </div>
+</div>
+
+<!-- Pending Approvals Section (Admin RBAC required) -->
+{% if pending_actions %}
+<div class="card" style="border-color: var(--warning-border);">
+    <div class="card-header" style="background-color: var(--warning-bg);">
+        <h3 class="card-title" style="color: var(--warning);">
+            Pending Administrator Approval Queue ({{ pending_actions.count }})
+        </h3>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Action</th>
+                    <th>Linked Incident</th>
+                    <th>Node</th>
+                    <th>Command Type</th>
+                    <th>Administrator Decision</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for act in pending_actions %}
+                <tr>
+                    <td><strong>{{ act.action_name }}</strong></td>
+                    <td>
+                        <a href="{% url 'incident_detail' incident_id=act.incident.id %}" style="font-weight: 600;">
+                            Incident #{{ act.incident.id }}: {{ act.incident.title|truncatechars:40 }}
+                        </a>
+                    </td>
+                    <td><code>{{ act.incident.server.hostname }}</code></td>
+                    <td><span class="badge badge-secondary">{{ act.command_type }}</span></td>
+                    <td>
+                        {% if user_can_approve %}
+                        <div style="display: flex; gap: 0.5rem;">
+                            <!-- Approve Form -->
+                            <form method="POST" action="{% url 'remediation_approve' action_id=act.id %}" style="display: inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-success btn-sm">Approve & Execute</button>
+                            </form>
+                            <!-- Reject Form -->
+                            <form method="POST" action="{% url 'remediation_reject' action_id=act.id %}" style="display: inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-danger btn-sm">Reject</button>
+                            </form>
+                        </div>
+                        {% else %}
+                        <span style="font-size: 12px; color: var(--text-secondary);">Awaiting Administrator Approval</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<div class="grid-2-1">
+    <!-- Executed Remediation Actions History -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Executed Remediation Actions & Health Verifications</h3>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Action</th>
+                        <th>Incident</th>
+                        <th>Status</th>
+                        <th>Executor / Approver</th>
+                        <th>Execution Log</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for act in executed_actions %}
+                    <tr>
+                        <td>
+                            <strong>{{ act.action_name }}</strong>
+                            <div style="font-size: 11px; color: var(--text-secondary);">
+                                Executed: {{ act.executed_at|date:"M d, H:i:s"|default:"Auto-engine" }}
+                            </div>
+                        </td>
+                        <td>
+                            <a href="{% url 'incident_detail' incident_id=act.incident.id %}">
+                                #{{ act.incident.id }}: {{ act.incident.title|truncatechars:25 }}
+                            </a>
+                        </td>
+                        <td>
+                            <span class="badge {% if act.status == 'SUCCESS' %}badge-success{% elif act.status == 'FAILED' %}badge-danger{% elif act.status == 'REJECTED' %}badge-secondary{% else %}badge-info{% endif %}">
+                                {{ act.get_status_display }}
+                            </span>
+                        </td>
+                        <td>{{ act.approved_by.username|default:"System Self-Healing" }}</td>
+                        <td>
+                            {% if act.result %}
+                            <pre class="evidence-block" style="max-height: 100px; font-size: 11px; margin: 0;">{{ act.result }}</pre>
+                            {% else %}
+                            <span style="color: var(--text-secondary);">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                            No remediation executions on record.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Quick Trigger Card -->
+    {% if user_can_remediate %}
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Trigger Manual Safe Remediation</h3>
+        </div>
+        <form method="POST" action="{% url 'remediation_trigger' %}">
+            {% csrf_token %}
+            <div class="card-body">
+                <p style="font-size: 12px; color: var(--text-secondary);">
+                    Execute an allowlisted recovery workflow on the active host node.
+                </p>
+
+                <div class="form-group">
+                    <label class="form-label">Recovery Operation</label>
+                    {{ trigger_form.action_type }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Target Service</label>
+                    {{ trigger_form.service_name }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Reason / Justification</label>
+                    {{ trigger_form.reason }}
+                </div>
+            </div>
+            <div class="card-footer" style="display: flex; justify-content: flex-end;">
+                <button type="submit" class="btn btn-warning">Trigger Action</button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

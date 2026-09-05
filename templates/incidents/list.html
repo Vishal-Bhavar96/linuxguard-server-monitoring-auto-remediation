@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}System Incidents & Alerts{% endblock %}
+{% block breadcrumb %}Incidents & Anomaly Detection{% endblock %}
+
+{% block content %}
+<!-- Incident Stats KPIs -->
+<div class="grid-4">
+    <div class="kpi-card">
+        <span class="kpi-label">Open Incidents</span>
+        <span class="kpi-value" style="color: var(--critical);">{{ stats.open }}</span>
+        <span class="kpi-subtext">Unresolved alerts</span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">Investigating</span>
+        <span class="kpi-value" style="color: var(--warning);">{{ stats.investigating }}</span>
+        <span class="kpi-subtext">Under active diagnosis</span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">Critical Priority</span>
+        <span class="kpi-value" style="color: var(--critical);">{{ stats.critical }}</span>
+        <span class="kpi-subtext">Surpassing critical thresholds</span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">Resolved Total</span>
+        <span class="kpi-value" style="color: var(--success);">{{ stats.resolved }}</span>
+        <span class="kpi-subtext">Remediated & Closed</span>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-body" style="padding: 1rem;">
+        <form method="GET" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 180px;">
+                <label class="form-label">Server</label>
+                {{ form.server }}
+            </div>
+            <div style="flex: 1; min-width: 150px;">
+                <label class="form-label">Severity</label>
+                {{ form.severity }}
+            </div>
+            <div style="flex: 1; min-width: 150px;">
+                <label class="form-label">Status</label>
+                {{ form.status }}
+            </div>
+            <div style="flex: 1; min-width: 150px;">
+                <label class="form-label">Category</label>
+                {{ form.category }}
+            </div>
+            <div>
+                <button type="submit" class="btn btn-blue">Filter</button>
+                <a href="{% url 'incident_list' %}" class="btn btn-secondary">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Incidents List Table -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Detected Incidents & Root Causes</h3>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Severity</th>
+                    <th>Incident Title</th>
+                    <th>Category</th>
+                    <th>Node</th>
+                    <th>Confidence</th>
+                    <th>Status</th>
+                    <th>Detected</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inc in incidents %}
+                <tr>
+                    <td>
+                        <span class="badge {% if inc.severity == 'CRITICAL' %}badge-danger{% elif inc.severity == 'HIGH' %}badge-warning{% elif inc.severity == 'MEDIUM' %}badge-info{% else %}badge-secondary{% endif %}">
+                            {{ inc.severity }}
+                        </span>
+                    </td>
+                    <td>
+                        <a href="{% url 'incident_detail' incident_id=inc.id %}" style="font-weight: 600; color: var(--text-heading);">
+                            {{ inc.title }}
+                        </a>
+                        <div style="font-size: 11.5px; color: var(--text-secondary);">
+                            Probable Cause: {{ inc.probable_cause|truncatechars:55 }}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge badge-secondary">{{ inc.get_category_display }}</span>
+                    </td>
+                    <td><strong>{{ inc.server.hostname }}</strong></td>
+                    <td>
+                        <strong style="color: var(--primary);">{{ inc.confidence|floatformat:0 }}%</strong>
+                    </td>
+                    <td>
+                        <span class="badge {% if inc.status == 'OPEN' %}badge-danger{% elif inc.status == 'INVESTIGATING' %}badge-warning{% elif inc.status == 'RESOLVED' %}badge-success{% else %}badge-secondary{% endif %}">
+                            {{ inc.get_status_display }}
+                        </span>
+                    </td>
+                    <td>{{ inc.detected_at|date:"M d, H:i" }}</td>
+                    <td>
+                        <a href="{% url 'incident_detail' incident_id=inc.id %}" class="btn btn-secondary btn-sm">Investigate</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                        No incidents match the selected filter criteria.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if incidents.has_other_pages %}
+    <div class="card-footer pagination-area">
+        <span>Showing page {{ incidents.number }} of {{ incidents.paginator.num_pages }}</span>
+        <div class="pagination-links">
+            {% if incidents.has_previous %}
+            <a href="?page={{ incidents.previous_page_number }}" class="page-link">&laquo; Prev</a>
+            {% endif %}
+            <span class="page-link active">{{ incidents.number }}</span>
+            {% if incidents.has_next %}
+            <a href="?page={{ incidents.next_page_number }}" class="page-link">Next &raquo;</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

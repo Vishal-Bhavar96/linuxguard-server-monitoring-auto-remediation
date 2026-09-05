@@ -1,0 +1,6 @@
+Django>=5.0,<6.0
+psutil>=5.9.0
+pytest>=8.0.0
+pytest-django>=4.8.0
+python-dotenv>=1.0.0
+# Note: mysqlclient can be used when connecting to MySQL; SQLite is configured as default development database.

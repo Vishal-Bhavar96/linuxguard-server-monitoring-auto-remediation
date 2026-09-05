@@ -8,6 +8,7 @@ import socket
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.csrf import csrf_protect
 from django.contrib import messages
 from django.utils import timezone
 from django.db.models import Q, Avg, Max, Min, Count
@@ -37,7 +38,9 @@ from .engines.command_security import CommandSecurity, CommandSecurityError
 # 1. AUTHENTICATION VIEWS
 # ==============================================================================
 
+@csrf_protect
 def login_view(request):
+
     if request.user.is_authenticated:
         return redirect('dashboard')
 

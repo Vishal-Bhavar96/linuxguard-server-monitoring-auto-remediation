@@ -1,0 +1,123 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <meta name="description" content="LinuxGuard - Intelligent Linux Server Monitoring & Auto-Remediation Platform">
+    <title>{% block title %}Dashboard{% endblock %} | LinuxGuard</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <span class="brand-badge">LG</span>
+                <span class="brand-title">LinuxGuard</span>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section-title">Core Operations</div>
+                <a href="{% url 'dashboard' %}" class="nav-item {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                    <span>Overview Dashboard</span>
+                </a>
+                <a href="{% url 'server_list' %}" class="nav-item {% if 'server' in request.resolver_match.url_name %}active{% endif %}">
+                    <span>Monitored Servers</span>
+                    {% if nav_total_servers %}
+                    <span class="nav-badge info">{{ nav_total_servers }}</span>
+                    {% endif %}
+                </a>
+
+                <div class="nav-section-title">Telemetry & Diagnostics</div>
+                <a href="{% url 'metrics' %}" class="nav-item {% if request.resolver_match.url_name == 'metrics' %}active{% endif %}">
+                    <span>System Metrics</span>
+                </a>
+                <a href="{% url 'processes' %}" class="nav-item {% if request.resolver_match.url_name == 'processes' %}active{% endif %}">
+                    <span>Process Table</span>
+                </a>
+                <a href="{% url 'services' %}" class="nav-item {% if request.resolver_match.url_name == 'services' %}active{% endif %}">
+                    <span>Service Health</span>
+                </a>
+
+                <div class="nav-section-title">Incidents & Healing</div>
+                <a href="{% url 'incident_list' %}" class="nav-item {% if 'incident' in request.resolver_match.url_name %}active{% endif %}">
+                    <span>Incidents</span>
+                    {% if nav_open_incidents %}
+                    <span class="nav-badge {% if nav_critical_incidents %}danger{% else %}warning{% endif %}">{{ nav_open_incidents }}</span>
+                    {% endif %}
+                </a>
+                <a href="{% url 'remediation_list' %}" class="nav-item {% if 'remediation' in request.resolver_match.url_name %}active{% endif %}">
+                    <span>Auto-Remediation</span>
+                    {% if nav_pending_remediations %}
+                    <span class="nav-badge warning">{{ nav_pending_remediations }}</span>
+                    {% endif %}
+                </a>
+
+                <div class="nav-section-title">Security & Governance</div>
+                <a href="{% url 'security' %}" class="nav-item {% if request.resolver_match.url_name == 'security' %}active{% endif %}">
+                    <span>Security Events</span>
+                    {% if nav_security_alerts %}
+                    <span class="nav-badge danger">{{ nav_security_alerts }}</span>
+                    {% endif %}
+                </a>
+                <a href="{% url 'audit_logs' %}" class="nav-item {% if request.resolver_match.url_name == 'audit_logs' %}active{% endif %}">
+                    <span>Audit Trail</span>
+                </a>
+                <a href="{% url 'settings' %}" class="nav-item {% if request.resolver_match.url_name == 'settings' %}active{% endif %}">
+                    <span>Threshold Settings</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-profile-summary">
+                    <span class="user-name">{{ request.user.username }}</span>
+                    <span class="user-role-badge">Role: {{ request.user.get_role_display|default:user_role }}</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main View Wrapper -->
+        <div class="main-wrapper">
+            <!-- Top Navbar -->
+            <header class="top-navbar">
+                <div class="breadcrumb-area">
+                    <span>LinuxGuard</span> / 
+                    <strong>{% block breadcrumb %}Platform Overview{% endblock %}</strong>
+                </div>
+
+                <div class="top-actions">
+                    <!-- Refresh Telemetry Form -->
+                    <form method="POST" action="{% url 'refresh_telemetry' %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-secondary btn-sm" title="Sample Real Host Telemetry Immediately">
+                            ↻ Sample Telemetry
+                        </button>
+                    </form>
+
+                    <a href="{% url 'profile' %}" class="btn btn-secondary btn-sm">Profile</a>
+                    <a href="{% url 'logout' %}" class="btn btn-danger btn-sm">Logout</a>
+                </div>
+            </header>
+
+            <!-- Page Body -->
+            <main class="content-container">
+                <!-- Django Flash Messages -->
+                {% if messages %}
+                <div class="messages-container">
+                    {% for message in messages %}
+                    <div class="alert-box alert-{{ message.tags }}">
+                        <span>{{ message }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+</body>
+</html>

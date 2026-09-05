@@ -1,0 +1,55 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | LinuxGuard Monitoring Platform</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body class="login-container">
+    <div class="login-card">
+        <div class="login-header">
+            <span class="login-logo">LinuxGuard</span>
+            <h2>Sign In to LinuxGuard</h2>
+            <p style="color: var(--text-secondary); font-size: 13px;">Intelligent Linux Server Monitoring & Auto-Remediation</p>
+        </div>
+
+        {% if messages %}
+        <div class="messages-container">
+            {% for message in messages %}
+            <div class="alert-box alert-{{ message.tags }}">
+                <span>{{ message }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="POST" action="{% url 'login' %}">
+            {% csrf_token %}
+            <div class="form-group">
+                <label class="form-label" for="username">Username</label>
+                <input type="text" id="username" name="username" class="form-control" required autofocus placeholder="admin / operator / viewer">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="password">Password</label>
+                <input type="password" id="password" name="password" class="form-control" required placeholder="Enter your password">
+            </div>
+
+            <div class="form-group" style="margin-top: 1.5rem;">
+                <button type="submit" class="btn btn-blue" style="width: 100%; padding: 0.75rem;">
+                    Sign In to Console
+                </button>
+            </div>
+        </form>
+
+        <div class="demo-credentials-box">
+            <strong>Default RBAC Credentials:</strong><br>
+            • Admin: <code>admin</code> / <code>AdminPass123!</code><br>
+            • Operator: <code>operator</code> / <code>OperatorPass123!</code><br>
+            • Viewer: <code>viewer</code> / <code>ViewerPass123!</code>
+        </div>
+    </div>
+</body>
+</html>

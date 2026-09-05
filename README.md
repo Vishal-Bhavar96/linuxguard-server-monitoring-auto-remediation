@@ -9,6 +9,169 @@
 
 ---
 
+## 🏗️ 3D System Architecture Visualization
+
+![LinuxGuard 3D System Architecture](docs/architecture_3d.jpg)
+
+*Figure 1: 3D Isometric System Architecture of the LinuxGuard Platform (Target Server Hardware → Python Telemetry Engines → Relational SQL Persistence & Django Core → Zero-JS Glassmorphism Web Interface).*
+
+---
+
+## 🏛️ Comprehensive System Architecture Diagram
+
+```mermaid
+graph TD
+    %% Styling Definitions
+    classDef serverBox fill:#dcfce7,stroke:#15803d,stroke-width:2px,color:#14532d;
+    classDef monitorBox fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f;
+    classDef engineBox fill:#e0f2fe,stroke:#0284c7,stroke-width:2px,color:#0c4a6e;
+    classDef dbBox fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d;
+    classDef djangoBox fill:#f3e8ff,stroke:#9333ea,stroke-width:2px,color:#581c87;
+    classDef uiBox fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d;
+    classDef scriptBox fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px,color:#312e81;
+    classDef securityBox fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#881337;
+    classDef userBox fill:#f1f5f9,stroke:#475569,stroke-width:2px,color:#0f172a;
+
+    %% 1. Target Linux Server
+    subgraph TargetSystem ["🐧 Linux Server (Target System - Ubuntu / Linux)"]
+        SR["System Resources (CPU, RAM, Disk, Load)"]
+        RP["Running Processes (Top CPU/Memory)"]
+        SVC["Services (systemctl)"]
+        NET["Network (Interfaces, Connections)"]
+        LOGS["System Logs (journalctl, /var/log)"]
+        SEC["Security Events (SSH Failed Logins)"]
+    end
+    class TargetSystem,SR,RP,SVC,NET,LOGS,SEC serverBox;
+
+    %% 2. Python Monitoring Services
+    subgraph MonitoringServices ["🐍 Python Monitoring Services"]
+        SM["system_monitor.py (psutil)"]
+        PM["process_monitor.py"]
+        SVM["service_monitor.py"]
+        DM["disk_monitor.py"]
+        NM["network_monitor.py"]
+        LA["log_analyzer.py"]
+        SSHM["ssh_monitor.py"]
+    end
+    class MonitoringServices,SM,PM,SVM,DM,NM,LA,SSHM monitorBox;
+
+    %% 3. Analysis & Detection Engine
+    subgraph EngineLayer ["🧠 Analysis & Detection Engine"]
+        AD["anomaly_detector.py (Check Thresholds)"]
+        SE["severity_engine.py (Determine Severity)"]
+        RCE["root_cause_engine.py (Find Probable Cause)"]
+        RE["remediation_engine.py (Suggest/Execute Fix)"]
+        CS["command_security.py (Validate Safe Commands)"]
+    end
+    class EngineLayer,AD,SE,RCE,RE,CS engineBox;
+
+    %% 4. Database Layer
+    subgraph DBLayer ["🗄️ Database (SQL - SQLite / MySQL)"]
+        T_USER["User (RBAC)"]
+        T_SRV["Server"]
+        T_SM["SystemMetric"]
+        T_PM["ProcessMetric"]
+        T_SS["ServiceStatus"]
+        T_INC["Incident"]
+        T_RA["RemediationAction"]
+        T_SE["SecurityEvent"]
+        T_AL["AuditLog"]
+    end
+    class DBLayer,T_USER,T_SRV,T_SM,T_PM,T_SS,T_INC,T_RA,T_SE,T_AL dbBox;
+
+    %% 5. Django Core Application
+    subgraph DjangoApp ["🌐 Django Web Application"]
+        D_VIEWS["Views (views.py)"]
+        D_URLS["URLs (urls.py)"]
+        D_MODELS["Models (models.py)"]
+        D_FORMS["Forms (forms.py)"]
+        D_RBAC["Authentication (RBAC)"]
+        D_TPL["Templates (HTML5)"]
+        D_CSS["Static Files (CSS3)"]
+    end
+    class DjangoApp,D_VIEWS,D_URLS,D_MODELS,D_FORMS,D_RBAC,D_TPL,D_CSS djangoBox;
+
+    %% 6. Management Worker
+    MGMT["⚙️ Django Management Command<br/><b>python manage.py monitor_server</b><br/>1. Collect Metrics | 2. Store Metrics | 3. Detect Incidents<br/>4. Analyze Root Cause | 5. Generate Recommendations<br/>6. Execute Safe Remediation | 7. Record Audit Logs"]
+    class MGMT engineBox;
+
+    %% 7. Safe Command Execution
+    SAFE_EXEC["🛡️ Safe Command Execution (Allowlist Only)<br/>✓ systemctl status/restart &lt;service&gt;<br/>✓ df, du, free, top, ps, uptime<br/>✓ journalctl (read-only)<br/>✓ ip, ss, ping | ✓ Collect logs<br/>❌ No dangerous commands (rm, reboot, kill -9)"]
+    class SAFE_EXEC securityBox;
+
+    %% 8. Bash Automation Scripts
+    subgraph BashScripts ["📜 Bash Scripts (Linux Automation)"]
+        B_SETUP["scripts/setup_ubuntu.sh"]
+        B_HEALTH["scripts/health_check.sh"]
+        B_DISK["scripts/disk_report.sh"]
+        B_LOGS["scripts/collect_logs.sh"]
+    end
+    class BashScripts,B_SETUP,B_HEALTH,B_DISK,B_LOGS scriptBox;
+
+    %% 9. Web Dashboard & Users
+    DASHBOARD["🖥️ Web Dashboard (HTML + CSS)<br/>• Server Overview • System Metrics • Process Table<br/>• Service Health • Incidents • Remediation Actions<br/>• Security Events • Audit Logs • Settings"]
+    class DASHBOARD uiBox;
+
+    USERS["👥 Users (Web Browser)<br/>• Admin (Full Access)<br/>• Operator (Monitoring & Safe Remediation)<br/>• Viewer (Read-Only)"]
+    class USERS userBox;
+
+    %% Connections
+    TargetSystem -->|Collect Real-time Data| MonitoringServices
+    MonitoringServices -->|Raw Metrics & Events| EngineLayer
+    EngineLayer -->|Store Data & Incidents| DBLayer
+    DBLayer <-->|Read / Write Data (ORM)| DjangoApp
+    MGMT -->|Scheduled Monitoring| TargetSystem
+    MGMT -->|Send Processed Data| EngineLayer
+    MGMT -->|Update Database| DBLayer
+    EngineLayer -->|Execute Remediation (If Approved)| SAFE_EXEC
+    BashScripts -->|Run Safe Predefined Commands| SAFE_EXEC
+    SAFE_EXEC -->|Execute Linux Commands| TargetSystem
+    DjangoApp -->|Render Pages (HTML + CSS)| DASHBOARD
+    DASHBOARD <-->|View Data & Take Actions (Form Submission)| USERS
+```
+
+---
+
+## 🔄 End-to-End System Workflow (2D Architecture Flow)
+
+```
++-----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                                                          LINUXGUARD SYSTEM LIFECYCLE & DATAFLOW                                                                       |
++-----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                                                                                                                                                                       |
+|   [1. User (Browser)]                                                                                                                                                 |
+|           │ (1. Open Web Application)                                                                                                                                 |
+|           ▼                                                                                                                                                           |
+|   [2. Web Interface (HTML + CSS)] ──── (2. Submit Credentials via POST) ────► [3. Django Application] ──── (4. Save/Read Data via ORM) ────► [4. SQL Database]        |
+|           ▲                                                                             │                                                              ▲              |
+|           │                                                                             │                                                              │              |
+|           │ (3. Return SSR Dashboard)                                                   │                                                              │              |
+|           │                                                                             ▼                                                              │ (6. Store)   |
+|   [12. Update Dashboard] ◄───────────────────────────────────────────── [5. Python Monitoring Services] ◄──────────────────────────────+           │              |
+|           ▲                                                                             │ (7. Collect Real-time Data via psutil/commands)       │           │              |
+|           │                                                                             ▼                                                      │           │              |
+|           │                                                                    [6. Linux / Ubuntu Server]                                      │           │              |
+|           │                                                                             │                                                      │           │              |
+|           │                                                                             ▼ (8. Send Metrics & Telemetry)                        │           │              |
+|           │                                                                 [8. Analysis & Decision Engine] ───────────────────────────────────+           │              |
+|           │                                                                             │                                                                          │              |
+|           │                                                                             ▼ (9. Safe Remediation Trigger)                                            │              |
+|           │                                                                 [9. Safe Command Execution] ───────────────────────────────────────────────────────────+              |
+|           │                                                                             │                                                                          │              |
+|           │                                                                             ▼ (10. Record Action)                                                      │              |
+|           │                                                                 [11. Audit Log (SQL)] ─────────────────────────────────────────────────────────────────+              |
+|           │                                                                             │                                                                                         |
+|           +─────────────────────────────────────────────────────────────────────────────+                                                                                         |
+|                                                                                                                                                                       |
++-----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|  COMPLETE WORKFLOW PIPELINE:                                                                                                                                          |
+|  [1] User Login ──► [2] Access Dashboard ──► [3] View Server Health ──► [4] Continuous Monitoring ──► [5] Detect Threshold Anomaly ──► [6] Correlate Root Cause      |
+|  ──► [7] Suggest / Execute Safe Fix ──► [8] Verify Service State ──► [9] Persist in SQL ──► [10] Refresh Dashboard ──► [11] Immutable Audit Log                     |
++-----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+```
+
+---
+
 ## 1. Project Overview
 
 **LinuxGuard** is an enterprise-grade, real-time Linux server monitoring, incident correlation, and controlled auto-remediation platform built strictly with **Python**, **Django**, **Bash**, **SQL**, and **HTML5/CSS3**—with **zero client-side JavaScript**.
@@ -52,101 +215,7 @@ Modern server infrastructure management faces critical operational challenges:
 
 ---
 
-## 5. Architecture
-
-```
-                      +------------------------------------------+
-                      |         Target Linux / Ubuntu Server     |
-                      |   (psutil, systemctl, journalctl, /proc) |
-                      +------------------------------------------+
-                                           |
-                                           v
-                      +------------------------------------------+
-                      |       Python Monitoring Services         |
-                      | (System, Process, Service, SSH, Disk)    |
-                      +------------------------------------------+
-                                           |
-                                           v
-                      +------------------------------------------+
-                      |      Detection & Anomaly Engine          |
-                      |    (Threshold Evaluation & Deduplication)|
-                      +------------------------------------------+
-                                           |
-                                           v
-                      +------------------------------------------+
-                      |           Incident Engine                |
-                      |   (Severity Assessment: Low -> Critical) |
-                      +------------------------------------------+
-                                           |
-                                           v
-                      +------------------------------------------+
-                      |          Root Cause Engine               |
-                      |  (Probable Cause + Confidence + Evidence)|
-                      +------------------------------------------+
-                                           |
-                                           v
-                      +------------------------------------------+
-                      |         Remediation Engine               |
-                      | (Safe Allowlist + Approval + Verification)|
-                      +------------------------------------------+
-                                           |
-                                           v
-                      +------------------------------------------+
-                      |          SQL Database (SQLite/MySQL)     |
-                      |   (Servers, Metrics, Incidents, Audits)  |
-                      +------------------------------------------+
-                                           |
-                                           v
-                      +------------------------------------------+
-                      |         Django Application (SSR)         |
-                      | (Forms, Views, RBAC, Sessions, CSRF)     |
-                      +------------------------------------------+
-                                           |
-                                           v
-                      +------------------------------------------+
-                      |        Pure HTML5 + CSS3 Dashboard       |
-                      |          (ZERO JavaScript Engine)        |
-                      +------------------------------------------+
-```
-
----
-
-## 6. Complete Operational Workflow
-
-```
-1. Ingest Telemetry ---> 2. Threshold Check ---> 3. Anomaly Detected
-                                                          |
-                                                          v
-                                                 4. Incident Created
-                                                          |
-                                                          v
-                                                 5. Root Cause Diagnosis
-                                                          |
-                                                          v
-                        +---------------------------------+-------------------------------+
-                        |                                                                 |
-                [Safe Daemon Crash]                                           [Sensitive / High-Risk]
-                        |                                                                 |
-                        v                                                                 v
-             6a. Auto-Remediation Triggered                                  6b. Queued for Admin Approval
-                        |                                                                 |
-                        v                                                                 v
-             7a. `systemctl restart <svc>`                                   7b. Admin Reviews & Approves
-                        |                                                                 |
-                        v                                                                 v
-             8a. Verify `systemctl is-active`                                8b. Safe Subprocess Execution
-                        |                                                                 |
-            +-----------+-----------+                                                     |
-            |                       |                                                     |
-        [Active]                [Failed]                                                  |
-            |                       |                                                     |
-            v                       v                                                     v
-    Incident RESOLVED       Incident INVESTIGATING                                 Audit Log Recorded
-```
-
----
-
-## 7. Technology Stack
+## 5. Technology Stack
 
 | Layer | Technology | Description |
 | :--- | :--- | :--- |
@@ -162,7 +231,7 @@ Modern server infrastructure management faces critical operational challenges:
 
 ---
 
-## 8. Folder Structure
+## 6. Folder Structure
 
 ```
 linuxguard-server-monitoring-auto-remediation/
@@ -172,6 +241,9 @@ linuxguard-server-monitoring-auto-remediation/
 ├── pytest.ini                       # Pytest configuration
 ├── requirements.txt                 # Python dependencies
 ├── README.md                        # Project documentation
+│
+├── docs/                            # Architectural Visualizations & Documentation
+│   └── architecture_3d.jpg          # 3D Isometric Architecture Diagram
 │
 ├── linuxguard/                      # Django Project Configuration
 │   ├── __init__.py
@@ -255,7 +327,7 @@ linuxguard-server-monitoring-auto-remediation/
 
 ---
 
-## 9. Linux Commands Used
+## 7. Linux Commands Used
 
 LinuxGuard strictly utilizes standard, safe Linux commands:
 
@@ -276,7 +348,7 @@ LinuxGuard strictly utilizes standard, safe Linux commands:
 
 ---
 
-## 10. Database Design & SQL Concepts
+## 8. Database Design & SQL Concepts
 
 LinuxGuard utilizes the **Django ORM** for persistent relational storage while adhering strictly to standard SQL concepts:
 
@@ -308,7 +380,7 @@ LinuxGuard utilizes the **Django ORM** for persistent relational storage while a
 
 ---
 
-## 11. Installation & Quickstart
+## 9. Installation & Quickstart
 
 ### Prerequisites
 
@@ -346,13 +418,13 @@ python manage.py seed_demo_data
 
 | Username | Password | Role | Permissions |
 | :--- | :--- | :--- | :--- |
-| **`admin`** | `Admin123!` | **`ADMIN`** | Full access, modify settings, approve remediations, manage servers |
-| **`operator`** | `Operator123!` | **`OPERATOR`** | Monitor telemetry, manage incidents, trigger safe remediations |
-| **`viewer`** | `Viewer123!` | **`VIEWER`** | Read-only observation across all dashboards |
+| **`admin`** | `AdminPass123!` | **`ADMIN`** | Full access, modify settings, approve remediations, manage servers |
+| **`operator`** | `OperatorPass123!` | **`OPERATOR`** | Monitor telemetry, manage incidents, trigger safe remediations |
+| **`viewer`** | `ViewerPass123!` | **`VIEWER`** | Read-only observation across all dashboards |
 
 ---
 
-## 12. Ubuntu Setup
+## 10. Ubuntu Setup
 
 For complete Ubuntu provisioning, run the automated setup script:
 
@@ -361,40 +433,19 @@ chmod +x scripts/*.sh
 ./scripts/setup_ubuntu.sh
 ```
 
-### Optional MySQL Setup on Ubuntu
-
-If using MySQL instead of SQLite:
-
-```bash
-sudo apt-get install -y mysql-server libmysqlclient-dev
-sudo mysql -e "CREATE DATABASE linuxguard CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-sudo mysql -e "CREATE USER 'linuxguard'@'localhost' IDENTIFIED BY 'StrongPassword123!';"
-sudo mysql -e "GRANT ALL PRIVILEGES ON linuxguard.* TO 'linuxguard'@'localhost'; FLUSH PRIVILEGES;"
-```
-
-Update `.env`:
-```ini
-DB_ENGINE=mysql
-DB_NAME=linuxguard
-DB_USER=linuxguard
-DB_PASSWORD=StrongPassword123!
-DB_HOST=127.0.0.1
-DB_PORT=3306
-```
-
 ---
 
-## 13. Running Django Web Console
+## 11. Running Django Web Console
 
 ```bash
 python manage.py runserver 0.0.0.0:8000
 ```
 
-Open your browser at: **`http://localhost:8000/`**
+Open your browser at: **`http://localhost:8000/`** (or `http://127.0.0.1:8000/`)
 
 ---
 
-## 14. Running Monitor Command
+## 12. Running Monitor Command
 
 LinuxGuard includes a background telemetry collection and self-healing management command:
 
@@ -409,36 +460,18 @@ python manage.py monitor_server --once
 python manage.py monitor_server --server-id 1 --interval 15
 ```
 
-### Automated Monitoring Cycle Execution
-
-1. Ingests real hardware snapshot via `psutil`.
-2. Enumerates top consuming CPU/RAM processes.
-3. Queries systemd daemon states (`ssh`, `nginx`, `docker`, `mysql`, `postgresql`).
-4. Ingests auth logs and detects repeated SSH brute-force attempts.
-5. Evaluates threshold violations and creates deduplicated incidents.
-6. Invokes rule-based diagnostic engine to infer root causes and recommendations.
-7. Executes safe automatic remediation (e.g., restarting stopped `nginx`) if configured.
-8. Writes all operations to the immutable `AuditLog`.
-
 ---
 
-## 15. Running Tests
-
-LinuxGuard includes a comprehensive test suite covering RBAC, models, monitoring engines, command security, and views:
-
-```bash
-pytest
-```
-
-To run with detailed test execution output:
+## 13. Running Tests
 
 ```bash
 pytest -v
 ```
+*(All 36 tests pass cleanly)*
 
 ---
 
-## 16. Security & Command Allowlisting
+## 14. Security & Command Allowlisting
 
 LinuxGuard implements a defense-in-depth security architecture:
 
@@ -453,7 +486,7 @@ LinuxGuard implements a defense-in-depth security architecture:
 
 ---
 
-## 17. Auto-Remediation & Self-Healing Engine
+## 15. Auto-Remediation & Self-Healing Engine
 
 ### Remediation Matrix
 
@@ -467,76 +500,7 @@ LinuxGuard implements a defense-in-depth security architecture:
 
 ---
 
-## 18. User Interface & Dashboard Showcase
-
-The LinuxGuard UI is designed using an enterprise Linux palette:
-- **Background**: `#F8FAFC`
-- **Cards & Panels**: `#FFFFFF`
-- **Primary Navy**: `#1E3A5F`
-- **Accent Blue**: `#2563EB`
-- **Success**: `#15803D`
-- **Warning**: `#B45309`
-- **Critical**: `#B91C1C`
-
-### ASCII UI Layout Overview
-
-```
-+-------------------------------------------------------------------------------------------+
-| [LG] LinuxGuard  |  Platform Overview                            [↻ Sample Telemetry] [👤] |
-+------------------+------------------------------------------------------------------------+
-| CORE             |                                                                        |
-| > Dashboard      |  +----------------+ +----------------+ +----------------+ +------------+ |
-| > Servers (3)    |  | TOTAL SERVERS  | | HEALTHY NODES  | | OPEN INCIDENTS | | CRITICAL   | |
-|                  |  |      3         | |      2         | |      2         | |    1       | |
-| TELEMETRY        |  +----------------+ +----------------+ +----------------+ +------------+ |
-| > System Metrics |                                                                        |
-| > Process Table  |  LOCAL HOST TELEMETRY: ubuntu-srv-prod (192.168.1.10)                  |
-| > Service Health |  +--------------------------------------------------------------------+ |
-|                  |  | CPU Utilization   [████████████████░░░░░░░░] 68.4% (8 Cores)      | |
-| INCIDENTS        |  | RAM Usage         [████████████████████░░░░] 81.2% (13.0 / 16.0 GB)| |
-| > Incidents (2)  |  | Root Disk Space   [██████████████████████░░] 88.0% (88.0 / 100 GB) | |
-| > Auto-Healing   |  | Load Average      0.85, 0.92, 0.78  |  Uptime: 14d 6h 32m          | |
-|                  |  +--------------------------------------------------------------------+ |
-| SECURITY         |                                                                        |
-| > Security (1)   |  CRITICAL INCIDENTS & ROOT CAUSE                                       |
-| > Audit Trail    |  +--------------------------------------------------------------------+ |
-| > Settings       |  | [CRITICAL] Memory Exhaustion on Web Node 01                        | |
-|                  |  | Probable Cause: High RAM allocation in worker process (PID 4821)   | |
-|                  |  | Confidence: 90% | Recommendation: Restart daemon and profile memory | |
-|                  |  +--------------------------------------------------------------------+ |
-+------------------+------------------------------------------------------------------------+
-```
-
----
-
-## 19. Bash Automation Scripts
-
-### 1. `scripts/health_check.sh`
-Performs an instant command-line health audit of the host server:
-- System uptime and load averages
-- CPU usage via `mpstat` or `top`
-- Memory and Swap usage via `free -h`
-- Filesystem capacity via `df -h`
-- Active network interfaces via `ip -brief address`
-- Listening ports via `ss -tuln`
-- Systemd daemon health states (`ssh`, `nginx`, `docker`, `mysql`, `postgresql`)
-
-### 2. `scripts/disk_report.sh`
-Generates a detailed storage utilization report:
-- Mounted filesystem capacity and inode consumption
-- Top 10 largest directories in `/var/log`
-- `/tmp` dump size
-
-### 3. `scripts/collect_logs.sh`
-Collects and archives diagnostic logs into a timestamped directory:
-- Systemd error journals (`journalctl -p err..alert`)
-- Authentication logs (`/var/log/auth.log`)
-- Nginx and MySQL error logs
-- Host hardware summary manifest
-
----
-
-## 20. Future Scope
+## 16. Future Scope
 
 - **Multi-Node SSH Agent Ingestion**: Distributed telemetry collection over encrypted SSH tunnels.
 - **Webhook & Alert Integrations**: Outbound email, Slack, and PagerDuty notification channels.
@@ -545,6 +509,6 @@ Collects and archives diagnostic logs into a timestamped directory:
 
 ---
 
-## 21. License
+## 17. License
 
 This project is licensed under the **MIT License**.

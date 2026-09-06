@@ -170,11 +170,69 @@ class SystemMonitor:
         }
 
     @classmethod
+    def get_host_info(cls) -> Dict[str, Any]:
+        """
+        Extracts real host system metadata: hostname, IP address, OS release, kernel, uptime.
+        Reads /etc/os-release on Linux or standard platform metadata.
+        """
+        import socket
+        import platform
+
+        hostname = socket.gethostname()
+        is_linux = platform.system() == 'Linux'
+        kernel_version = platform.uname().release or platform.release()
+
+        # Extract real Linux Distribution name if on Linux
+        os_name = f"{platform.system()} {platform.release()}"
+        distro_details = ""
+        if is_linux and os.path.exists('/etc/os-release'):
+            try:
+                with open('/etc/os-release', 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.startswith('PRETTY_NAME='):
+                            os_name = line.strip().split('=', 1)[1].strip('"\'')
+                        elif line.startswith('VERSION='):
+                            distro_details = line.strip().split('=', 1)[1].strip('"\'')
+            except Exception:
+                pass
+        elif not is_linux:
+            os_name = f"{platform.system()} {platform.release()} (Development Host)"
+
+        # Extract primary network IP
+        primary_ip = '127.0.0.1'
+        try:
+            # Connect dummy socket to determine outgoing interface IP without sending data
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            primary_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            try:
+                primary_ip = socket.gethostbyname(hostname)
+            except Exception:
+                primary_ip = '127.0.0.1'
+
+        uptime_info = cls.get_uptime()
+
+        return {
+            'hostname': hostname,
+            'ip_address': primary_ip,
+            'operating_system': os_name,
+            'distro_details': distro_details,
+            'kernel_version': kernel_version,
+            'is_linux': is_linux,
+            'architecture': platform.machine(),
+            'uptime': uptime_info,
+            'status': 'ONLINE',
+        }
+
+    @classmethod
     def collect_snapshot(cls) -> Dict[str, Any]:
         """
         Collects a full hardware telemetry snapshot.
         """
         return {
+            'host': cls.get_host_info(),
             'cpu': cls.get_cpu_usage(),
             'memory': cls.get_memory_usage(),
             'disk': cls.get_disk_usage(),
@@ -185,6 +243,9 @@ class SystemMonitor:
 
 
 # Convenience functional wrappers
+def get_host_info() -> Dict[str, Any]:
+    return SystemMonitor.get_host_info()
+
 def get_cpu_usage() -> Dict[str, Any]:
     return SystemMonitor.get_cpu_usage()
 
@@ -202,3 +263,4 @@ def get_network_usage() -> Dict[str, Any]:
 
 def get_uptime() -> Dict[str, Any]:
     return SystemMonitor.get_uptime()
+

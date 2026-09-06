@@ -43,26 +43,27 @@ class Command(BaseCommand):
 
     def get_or_create_local_server(self) -> Server:
         """
-        Ensures the local host server is registered in the database.
+        Ensures the local host server is registered in the database with detected host telemetry.
         """
-        hostname = socket.gethostname()
-        try:
-            ip_address = socket.gethostbyname(hostname)
-        except Exception:
-            ip_address = '127.0.0.1'
-
+        host_info = SystemMonitor.get_host_info()
         server, created = Server.objects.get_or_create(
             is_local=True,
             defaults={
-                'hostname': hostname,
-                'ip_address': ip_address,
-                'operating_system': 'Linux / Host OS',
+                'hostname': host_info['hostname'],
+                'ip_address': host_info['ip_address'],
+                'operating_system': host_info['operating_system'],
+                'kernel_version': host_info.get('kernel_version', ''),
                 'status': Server.Status.ONLINE,
                 'description': 'Primary Local Host Machine'
             }
         )
-        if created:
-            self.stdout.write(self.style.SUCCESS(f"Registered local host server '{hostname}' (IP: {ip_address})."))
+        if not created:
+            server.operating_system = host_info['operating_system']
+            server.kernel_version = host_info.get('kernel_version', '')
+            server.ip_address = host_info['ip_address']
+            server.save()
+        else:
+            self.stdout.write(self.style.SUCCESS(f"Registered local host server '{server.hostname}' (IP: {server.ip_address}, OS: {server.operating_system})."))
         return server
 
     def execute_monitoring_cycle(self, server: Server):

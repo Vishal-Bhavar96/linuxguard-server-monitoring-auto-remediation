@@ -89,11 +89,11 @@
                 </div>
 
                 <div class="top-actions">
-                    <!-- Refresh Telemetry Form -->
+                    <!-- Refresh Real Host Telemetry Form -->
                     <form method="POST" action="{% url 'refresh_telemetry' %}" style="display:inline;">
                         {% csrf_token %}
-                        <button type="submit" class="btn btn-secondary btn-sm" title="Sample Real Host Telemetry Immediately">
-                            ↻ Sample Telemetry
+                        <button type="submit" class="btn btn-secondary btn-sm" title="Collect and save real host hardware and daemon telemetry immediately">
+                            ↻ Refresh Host Telemetry
                         </button>
                     </form>
 

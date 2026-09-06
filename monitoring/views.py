@@ -101,16 +101,18 @@ def dashboard_view(request):
     Visualized with pure CSS gauges, cards, and tables.
     """
     servers = Server.objects.all()
+    host_info = SystemMonitor.get_host_info()
+
     if not servers.exists():
-        # Ensure local server exists
-        hostname = socket.gethostname()
+        # Ensure local server exists with real detected metadata
         s_local = Server.objects.create(
-            hostname=hostname,
-            ip_address='127.0.0.1',
-            operating_system='Ubuntu Linux (Host)',
+            hostname=host_info['hostname'],
+            ip_address=host_info['ip_address'],
+            operating_system=host_info['operating_system'],
+            kernel_version=host_info.get('kernel_version', ''),
             status=Server.Status.ONLINE,
             is_local=True,
-            description='Local Node'
+            description='Primary Local Host Machine'
         )
         servers = Server.objects.all()
 
@@ -120,6 +122,14 @@ def dashboard_view(request):
         current_server = get_object_or_404(Server, id=selected_server_id)
     else:
         current_server = servers.filter(is_local=True).first() or servers.first()
+
+    # Sync local server metadata if currently viewing local node
+    if current_server and current_server.is_local:
+        current_server.operating_system = host_info['operating_system']
+        current_server.kernel_version = host_info.get('kernel_version', '')
+        current_server.ip_address = host_info['ip_address']
+        current_server.last_seen = timezone.now()
+        current_server.save()
 
     # Telemetry snapshot for current server
     latest_metric = None
@@ -131,9 +141,11 @@ def dashboard_view(request):
     if current_server and current_server.is_local:
         live_telemetry = SystemMonitor.collect_snapshot()
 
-    # Overview KPI Metrics
+    # Overview KPI Metrics (8 Standard Cards)
     total_servers = servers.count()
     healthy_servers = servers.filter(status=Server.Status.ONLINE).count()
+    online_servers = servers.filter(status=Server.Status.ONLINE).count()
+    offline_servers = servers.filter(status=Server.Status.OFFLINE).count()
     degraded_servers = servers.filter(status=Server.Status.DEGRADED).count()
     critical_servers = servers.filter(status=Server.Status.CRITICAL).count()
 
@@ -141,7 +153,10 @@ def dashboard_view(request):
     critical_incidents_count = active_incidents.filter(severity=Incident.Severity.CRITICAL).count()
     recent_incidents = Incident.objects.select_related('server').order_by('-detected_at')[:6]
 
+    security_events_count = SecurityEvent.objects.count()
     recent_security_events = SecurityEvent.objects.select_related('server').order_by('-timestamp')[:5]
+
+    pending_remediations_count = RemediationAction.objects.filter(status=RemediationAction.Status.PENDING_APPROVAL).count()
     recent_remediations = RemediationAction.objects.select_related('incident', 'incident__server').order_by('-id')[:5]
 
     # Services status on current server
@@ -152,12 +167,20 @@ def dashboard_view(request):
         'current_server': current_server,
         'latest_metric': latest_metric,
         'live_telemetry': live_telemetry,
+        'host_info': host_info,
+        'is_linux': host_info.get('is_linux', False),
+        # 8 KPI Metrics
         'total_servers': total_servers,
         'healthy_servers': healthy_servers,
+        'online_servers': online_servers,
+        'offline_servers': offline_servers,
         'degraded_servers': degraded_servers,
         'critical_servers': critical_servers,
         'active_incidents_count': active_incidents.count(),
         'critical_incidents_count': critical_incidents_count,
+        'security_events_count': security_events_count,
+        'pending_remediations_count': pending_remediations_count,
+        # Recent Data Feeds
         'recent_incidents': recent_incidents,
         'recent_security_events': recent_security_events,
         'recent_remediations': recent_remediations,
@@ -172,11 +195,22 @@ def trigger_telemetry_refresh_view(request):
     """
     Manually triggers immediate telemetry sampling on the host server.
     """
-    hostname = socket.gethostname()
+    host_info = SystemMonitor.get_host_info()
     server, _ = Server.objects.get_or_create(
         is_local=True,
-        defaults={'hostname': hostname, 'ip_address': '127.0.0.1', 'operating_system': 'Ubuntu Linux'}
+        defaults={
+            'hostname': host_info['hostname'],
+            'ip_address': host_info['ip_address'],
+            'operating_system': host_info['operating_system'],
+            'kernel_version': host_info.get('kernel_version', ''),
+            'status': Server.Status.ONLINE,
+        }
     )
+    server.operating_system = host_info['operating_system']
+    server.kernel_version = host_info.get('kernel_version', '')
+    server.ip_address = host_info['ip_address']
+    server.last_seen = timezone.now()
+    server.save()
 
     # Sample telemetry
     telemetry = SystemMonitor.collect_snapshot()
@@ -216,18 +250,22 @@ def trigger_telemetry_refresh_view(request):
             defaults={'status': s['status'], 'checked_at': timezone.now()}
         )
 
-    # Detect anomalies
+    # Detect anomalies & auto-resolution
     incidents = AnomalyDetector.process_system_telemetry(server, telemetry, top_procs)
+    for s in services_res:
+        serv_inc = AnomalyDetector.process_service_status(server, s)
+        if serv_inc:
+            incidents.append(serv_inc)
 
     AuditLog.objects.create(
         user=request.user,
         action="TELEMETRY_REFRESH",
         resource=f"Server: {server.hostname}",
-        description=f"Manual telemetry snapshot refreshed. Recorded CPU: {telemetry['cpu']['cpu_percent']}%, RAM: {telemetry['memory']['memory_percent']}%.",
+        description=f"Host telemetry snapshot refreshed. Recorded CPU: {telemetry['cpu']['cpu_percent']}%, RAM: {telemetry['memory']['memory_percent']}%, Disk: {telemetry['disk']['disk_percent']}%.",
         ip_address=request.META.get('REMOTE_ADDR', '127.0.0.1')
     )
 
-    messages.success(request, f"Telemetry snapshot updated for {server.hostname}! (CPU: {telemetry['cpu']['cpu_percent']}%, RAM: {telemetry['memory']['memory_percent']}%)")
+    messages.success(request, f"Host telemetry updated for {server.hostname}! (CPU: {telemetry['cpu']['cpu_percent']}%, RAM: {telemetry['memory']['memory_percent']}%, Disk: {telemetry['disk']['disk_percent']}%)")
     return redirect(request.META.get('HTTP_REFERER') or 'dashboard')
 
 
@@ -265,6 +303,14 @@ def server_detail_view(request, server_id):
         avg_disk=Avg('disk_usage'),
     )
 
+    recent_audit_logs = AuditLog.objects.filter(
+        Q(resource__icontains=server.hostname) | Q(description__icontains=server.hostname)
+    ).order_by('-timestamp')[:10]
+
+    uptime_str = "Active"
+    if server.is_local:
+        uptime_str = SystemMonitor.get_uptime()['formatted']
+
     context = {
         'server': server,
         'latest_metric': latest_metric,
@@ -273,6 +319,8 @@ def server_detail_view(request, server_id):
         'incidents': incidents,
         'security_events': security_events,
         'recent_processes': recent_processes,
+        'recent_audit_logs': recent_audit_logs,
+        'uptime_str': uptime_str,
         'agg_stats': agg_stats,
     }
     return render(request, 'servers/detail.html', context)

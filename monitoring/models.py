@@ -79,6 +79,7 @@ class Server(models.Model):
     hostname = models.CharField(max_length=255, unique=True)
     ip_address = models.GenericIPAddressField(default='127.0.0.1')
     operating_system = models.CharField(max_length=255, default='Ubuntu 22.04 LTS')
+    kernel_version = models.CharField(max_length=255, blank=True, default='')
     status = models.CharField(
         max_length=20,
         choices=Status.choices,

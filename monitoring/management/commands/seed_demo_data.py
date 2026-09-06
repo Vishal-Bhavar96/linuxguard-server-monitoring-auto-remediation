@@ -78,26 +78,34 @@ class Command(BaseCommand):
             SystemSetting.set_setting(key, val, desc)
 
         # 3. Create Monitored Servers
-        local_hostname = socket.gethostname()
+        from monitoring.engines.system_monitor import SystemMonitor
+        host_info = SystemMonitor.get_host_info()
+
         s_local, _ = Server.objects.get_or_create(
-            hostname=local_hostname,
+            hostname=host_info['hostname'],
             defaults={
-                'ip_address': '127.0.0.1',
-                'operating_system': 'Ubuntu Linux 22.04 LTS',
+                'ip_address': host_info['ip_address'],
+                'operating_system': host_info['operating_system'],
+                'kernel_version': host_info.get('kernel_version', ''),
                 'status': Server.Status.ONLINE,
                 'is_local': True,
-                'description': 'Primary Host Machine (Local Node)'
+                'description': 'Primary Host Machine (Real Telemetry)'
             }
         )
+        s_local.operating_system = host_info['operating_system']
+        s_local.kernel_version = host_info.get('kernel_version', '')
+        s_local.ip_address = host_info['ip_address']
+        s_local.save()
 
         s_prod, _ = Server.objects.get_or_create(
             hostname='ubuntu-prod-web-01',
             defaults={
                 'ip_address': '10.0.1.15',
                 'operating_system': 'Ubuntu 22.04 LTS (Jammy Jellyfish)',
+                'kernel_version': '5.15.0-91-generic',
                 'status': Server.Status.DEGRADED,
                 'is_local': False,
-                'description': 'Production Web Cluster Reverse Proxy (Nginx/Gunicorn)'
+                'description': 'Production Web Cluster Reverse Proxy [Demo / Sample Server]'
             }
         )
 
@@ -106,9 +114,10 @@ class Command(BaseCommand):
             defaults={
                 'ip_address': '10.0.2.40',
                 'operating_system': 'Ubuntu 20.04 LTS',
+                'kernel_version': '5.4.0-169-generic',
                 'status': Server.Status.ONLINE,
                 'is_local': False,
-                'description': 'PostgreSQL & Redis Relational Database Cluster'
+                'description': 'PostgreSQL & Redis Relational Database Cluster [Demo / Sample Server]'
             }
         )
 
@@ -117,9 +126,10 @@ class Command(BaseCommand):
             defaults={
                 'ip_address': '10.0.3.88',
                 'operating_system': 'Ubuntu 22.04 LTS',
+                'kernel_version': '5.15.0-91-generic',
                 'status': Server.Status.CRITICAL,
                 'is_local': False,
-                'description': 'Background Celery Task Worker & ETL Processing'
+                'description': 'Background Celery Task Worker & ETL Processing [Demo / Sample Server]'
             }
         )
 

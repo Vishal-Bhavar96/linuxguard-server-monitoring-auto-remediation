@@ -47,7 +47,7 @@ class AnomalyDetector:
         created_or_updated = []
         top_procs = top_processes or []
 
-        # 1. CPU Anomaly Check
+        # 1. CPU Anomaly Check & Recovery
         cpu_usage = telemetry.get('cpu', {}).get('cpu_percent', 0.0)
         if cpu_usage >= thresholds['cpu_warn']:
             severity = SeverityEngine.evaluate_metric_severity(
@@ -66,8 +66,25 @@ class AnomalyDetector:
                 diagnosis=diagnosis
             )
             created_or_updated.append(inc)
+        else:
+            # Auto-resolve existing CPU incident if normalized
+            existing_cpu = Incident.objects.filter(
+                server=server,
+                category=Incident.Category.CPU,
+                status__in=[Incident.Status.OPEN, Incident.Status.INVESTIGATING]
+            ).first()
+            if existing_cpu:
+                existing_cpu.status = Incident.Status.RESOLVED
+                existing_cpu.resolved_at = timezone.now()
+                existing_cpu.save()
+                AuditLog.objects.create(
+                    action="INCIDENT_AUTO_RESOLVED",
+                    resource=f"Incident #{existing_cpu.id}",
+                    description=f"CPU utilization normalized to {cpu_usage}% on {server.hostname}. Incident marked as RESOLVED.",
+                    ip_address="127.0.0.1"
+                )
 
-        # 2. RAM Anomaly Check
+        # 2. RAM Anomaly Check & Recovery
         mem_usage = telemetry.get('memory', {}).get('memory_percent', 0.0)
         swap_usage = telemetry.get('memory', {}).get('swap_percent', 0.0)
         if mem_usage >= thresholds['ram_warn']:
@@ -87,8 +104,25 @@ class AnomalyDetector:
                 diagnosis=diagnosis
             )
             created_or_updated.append(inc)
+        else:
+            # Auto-resolve existing RAM incident if normalized
+            existing_mem = Incident.objects.filter(
+                server=server,
+                category=Incident.Category.MEMORY,
+                status__in=[Incident.Status.OPEN, Incident.Status.INVESTIGATING]
+            ).first()
+            if existing_mem:
+                existing_mem.status = Incident.Status.RESOLVED
+                existing_mem.resolved_at = timezone.now()
+                existing_mem.save()
+                AuditLog.objects.create(
+                    action="INCIDENT_AUTO_RESOLVED",
+                    resource=f"Incident #{existing_mem.id}",
+                    description=f"RAM utilization normalized to {mem_usage}% on {server.hostname}. Incident marked as RESOLVED.",
+                    ip_address="127.0.0.1"
+                )
 
-        # 3. Disk Anomaly Check
+        # 3. Disk Anomaly Check & Recovery
         disk_usage = telemetry.get('disk', {}).get('disk_percent', 0.0)
         mountpoint = telemetry.get('disk', {}).get('mountpoint', '/')
         if disk_usage >= thresholds['disk_warn']:
@@ -108,6 +142,23 @@ class AnomalyDetector:
                 diagnosis=diagnosis
             )
             created_or_updated.append(inc)
+        else:
+            # Auto-resolve existing Disk incident if normalized
+            existing_disk = Incident.objects.filter(
+                server=server,
+                category=Incident.Category.DISK,
+                status__in=[Incident.Status.OPEN, Incident.Status.INVESTIGATING]
+            ).first()
+            if existing_disk:
+                existing_disk.status = Incident.Status.RESOLVED
+                existing_disk.resolved_at = timezone.now()
+                existing_disk.save()
+                AuditLog.objects.create(
+                    action="INCIDENT_AUTO_RESOLVED",
+                    resource=f"Incident #{existing_disk.id}",
+                    description=f"Disk utilization normalized to {disk_usage}% on {server.hostname}. Incident marked as RESOLVED.",
+                    ip_address="127.0.0.1"
+                )
 
         return created_or_updated
 

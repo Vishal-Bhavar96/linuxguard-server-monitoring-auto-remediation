@@ -65,9 +65,22 @@ def test_get_uptime():
 
 def test_collect_snapshot():
     snapshot = SystemMonitor.collect_snapshot()
+    assert 'host' in snapshot
     assert 'cpu' in snapshot
     assert 'memory' in snapshot
     assert 'disk' in snapshot
     assert 'load_average' in snapshot
     assert 'network' in snapshot
     assert 'uptime' in snapshot
+
+
+def test_get_host_info():
+    host_info = SystemMonitor.get_host_info()
+    assert 'hostname' in host_info
+    assert 'ip_address' in host_info
+    assert 'operating_system' in host_info
+    assert 'kernel_version' in host_info
+    assert 'is_linux' in host_info
+    assert isinstance(host_info['hostname'], str)
+    assert len(host_info['hostname']) > 0
+

@@ -4,25 +4,32 @@
 {% block breadcrumb %}<a href="{% url 'server_list' %}">Servers</a> / {{ server.hostname }}{% endblock %}
 
 {% block content %}
-<!-- Server Header -->
+<!-- Server Metadata & Host Banner -->
 <div class="card" style="margin-bottom: 1.5rem;">
-    <div class="card-body" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div class="card-body" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
         <div>
-            <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
                 <h2>{{ server.hostname }}</h2>
                 <span class="badge {% if server.status == 'ONLINE' %}badge-success{% elif server.status == 'CRITICAL' %}badge-danger{% else %}badge-warning{% endif %}">
                     {{ server.get_status_display }}
                 </span>
                 {% if server.is_local %}
-                <span class="badge badge-info">Local Node</span>
+                <span class="badge badge-info">Real Host Node</span>
+                {% else %}
+                <span class="badge badge-secondary">Demo / Sample Node</span>
                 {% endif %}
             </div>
-            <p style="color: var(--text-secondary); margin: 0.25rem 0 0 0;">
-                IP: <code>{{ server.ip_address }}</code> | OS: {{ server.operating_system }} | Registered: {{ server.created_at|date:"M d, Y" }}
-            </p>
+            <div style="margin-top: 0.5rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; font-size: 13px;">
+                <div><strong>IP Address:</strong> <code>{{ server.ip_address }}</code></div>
+                <div><strong>Operating System:</strong> {{ server.operating_system }}</div>
+                <div><strong>Kernel Version:</strong> <code>{{ server.kernel_version|default:"Linux Standard Kernel" }}</code></div>
+                <div><strong>Uptime:</strong> {{ uptime_str }}</div>
+                <div><strong>Last Seen:</strong> {{ server.last_seen|timesince }} ago</div>
+                <div><strong>Registered:</strong> {{ server.created_at|date:"M d, Y H:i" }}</div>
+            </div>
         </div>
 
-        <div style="display: flex; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <a href="{% url 'server_metrics' server_id=server.id %}" class="btn btn-secondary btn-sm">Full Telemetry</a>
             <a href="{% url 'server_processes' server_id=server.id %}" class="btn btn-secondary btn-sm">Process List</a>
             <a href="{% url 'server_services' server_id=server.id %}" class="btn btn-secondary btn-sm">Manage Services</a>
@@ -37,28 +44,66 @@
 <!-- Aggregated Metrics Summary (AVG, MAX, MIN demonstration) -->
 <div class="grid-3">
     <div class="kpi-card">
-        <span class="kpi-label">CPU Average (Historical)</span>
-        <span class="kpi-value">{{ agg_stats.avg_cpu|default:0|floatformat:1 }}%</span>
-        <span class="kpi-subtext">Peak CPU: <strong>{{ agg_stats.max_cpu|default:0|floatformat:1 }}%</strong> | Min: {{ agg_stats.min_cpu|default:0|floatformat:1 }}%</span>
+        <span class="kpi-label">CPU Utilization</span>
+        <span class="kpi-value">{{ latest_metric.cpu_usage|default:agg_stats.avg_cpu|default:0|floatformat:1 }}%</span>
+        <span class="kpi-subtext">Avg: <strong>{{ agg_stats.avg_cpu|default:0|floatformat:1 }}%</strong> | Peak: {{ agg_stats.max_cpu|default:0|floatformat:1 }}%</span>
     </div>
     <div class="kpi-card">
-        <span class="kpi-label">RAM Average (Historical)</span>
-        <span class="kpi-value">{{ agg_stats.avg_ram|default:0|floatformat:1 }}%</span>
-        <span class="kpi-subtext">Peak RAM: <strong>{{ agg_stats.max_ram|default:0|floatformat:1 }}%</strong></span>
+        <span class="kpi-label">RAM Memory Usage</span>
+        <span class="kpi-value">{{ latest_metric.memory_usage|default:agg_stats.avg_ram|default:0|floatformat:1 }}%</span>
+        <span class="kpi-subtext">Avg: <strong>{{ agg_stats.avg_ram|default:0|floatformat:1 }}%</strong> | Peak: {{ agg_stats.max_ram|default:0|floatformat:1 }}%</span>
     </div>
     <div class="kpi-card">
-        <span class="kpi-label">Disk Storage Baseline</span>
-        <span class="kpi-value">{{ agg_stats.avg_disk|default:0|floatformat:1 }}%</span>
-        <span class="kpi-subtext">Root mount allocation</span>
+        <span class="kpi-label">Storage Partition</span>
+        <span class="kpi-value">{{ latest_metric.disk_usage|default:agg_stats.avg_disk|default:0|floatformat:1 }}%</span>
+        <span class="kpi-subtext">Root partition usage baseline</span>
     </div>
 </div>
 
-<!-- Services and Recent Incidents on this Node -->
+<!-- Top Processes & Monitored Services Grid -->
 <div class="grid-2">
+    <!-- Top Processes -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Top Consuming Processes</h3>
+            <a href="{% url 'server_processes' server_id=server.id %}" class="btn btn-secondary btn-sm">All Processes</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>PID</th>
+                        <th>Process</th>
+                        <th>User</th>
+                        <th>CPU %</th>
+                        <th>RAM %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in recent_processes %}
+                    <tr>
+                        <td><strong>{{ p.pid }}</strong></td>
+                        <td style="font-family: var(--font-mono); font-weight: 600;">{{ p.process_name }}</td>
+                        <td><code>{{ p.username }}</code></td>
+                        <td>{{ p.cpu_percent }}%</td>
+                        <td>{{ p.memory_percent }}%</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                            No recent process snapshots available.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <!-- Node Services -->
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title">Monitored Services</h3>
+            <h3 class="card-title">Systemd Daemon Health</h3>
             <a href="{% url 'server_services' server_id=server.id %}" class="btn btn-secondary btn-sm">Manage Services</a>
         </div>
         <div class="table-responsive">
@@ -92,11 +137,15 @@
             </table>
         </div>
     </div>
+</div>
 
+<!-- Incidents & Security Events Grid -->
+<div class="grid-2">
     <!-- Node Incidents -->
     <div class="card">
         <div class="card-header">
             <h3 class="card-title">Incidents & Root Cause Diagnosis</h3>
+            <a href="{% url 'incident_list' %}" class="btn btn-secondary btn-sm">All Incidents</a>
         </div>
         <div class="table-responsive">
             <table class="table">
@@ -140,51 +189,76 @@
             </table>
         </div>
     </div>
+
+    <!-- Security Events -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Security & SSH Alerts</h3>
+            <a href="{% url 'security' %}" class="btn btn-secondary btn-sm">Security Feed</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Source IP</th>
+                        <th>Description</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sec in security_events %}
+                    <tr>
+                        <td>
+                            <span class="badge {% if sec.severity == 'CRITICAL' %}badge-danger{% elif sec.severity == 'HIGH' %}badge-warning{% else %}badge-info{% endif %}">
+                                {{ sec.severity }}
+                            </span>
+                        </td>
+                        <td><code>{{ sec.source_ip|default:"Local" }}</code></td>
+                        <td style="font-size: 12px;">{{ sec.description|truncatechars:45 }}</td>
+                        <td>{{ sec.timestamp|timesince }} ago</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                            No security events detected on this node.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
-<!-- Telemetry History Table -->
-<div class="card">
+<!-- Recent Node Audit Trail -->
+<div class="card" style="margin-bottom: 1.5rem;">
     <div class="card-header">
-        <h3 class="card-title">Recent Telemetry Telemetry Log</h3>
+        <h3 class="card-title">Recent Node Operations Audit Trail</h3>
+        <a href="{% url 'audit_logs' %}" class="btn btn-secondary btn-sm">All Audit Logs</a>
     </div>
     <div class="table-responsive">
         <table class="table">
             <thead>
                 <tr>
                     <th>Timestamp</th>
-                    <th>CPU Load</th>
-                    <th>RAM Memory</th>
-                    <th>Disk Storage</th>
-                    <th>Load Average</th>
-                    <th>Network Sent</th>
-                    <th>Network Recv</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>Description</th>
                 </tr>
             </thead>
             <tbody>
-                {% for m in latest_metrics %}
+                {% for log in recent_audit_logs %}
                 <tr>
-                    <td>{{ m.timestamp|date:"Y-m-d H:i:s" }}</td>
-                    <td>
-                        <strong>{{ m.cpu_usage }}%</strong>
-                        <div class="progress-container" style="height: 6px; width: 80px; margin-top: 3px;">
-                            <div class="progress-bar {% if m.cpu_usage >= 85 %}progress-danger{% else %}progress-success{% endif %}" style="width: {{ m.cpu_usage }}%;"></div>
-                        </div>
-                    </td>
-                    <td>
-                        <strong>{{ m.memory_usage }}%</strong>
-                        <div class="progress-container" style="height: 6px; width: 80px; margin-top: 3px;">
-                            <div class="progress-bar {% if m.memory_usage >= 85 %}progress-danger{% else %}progress-success{% endif %}" style="width: {{ m.memory_usage }}%;"></div>
-                        </div>
-                    </td>
-                    <td>{{ m.disk_usage }}%</td>
-                    <td><code>{{ m.load_average }}</code></td>
-                    <td>{{ m.network_sent|filesizeformat }}</td>
-                    <td>{{ m.network_received|filesizeformat }}</td>
+                    <td>{{ log.timestamp|date:"Y-m-d H:i:s" }}</td>
+                    <td><code>{{ log.user.username|default:"SYSTEM" }}</code></td>
+                    <td><strong>{{ log.action }}</strong></td>
+                    <td style="font-size: 12.5px;">{{ log.description }}</td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                        No metrics recorded yet. Trigger monitoring sampling or run management command.
+                    <td colspan="4" style="text-align: center; padding: 1.5rem; color: var(--text-secondary);">
+                        No audit log entries for this node.
                     </td>
                 </tr>
                 {% endfor %}

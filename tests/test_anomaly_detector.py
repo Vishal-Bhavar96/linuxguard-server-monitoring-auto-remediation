@@ -88,3 +88,29 @@ def test_stopped_service_anomaly(test_server):
     inc.refresh_from_db()
     assert inc.status == Incident.Status.RESOLVED
     assert inc.resolved_at is not None
+
+
+@pytest.mark.django_db
+def test_metric_normalization_auto_resolves(test_server, default_threshold_settings):
+    # Step 1: Create CPU spike
+    high_telemetry = {
+        'cpu': {'cpu_percent': 98.0},
+        'memory': {'memory_percent': 40.0, 'swap_percent': 0.0},
+        'disk': {'disk_percent': 50.0, 'mountpoint': '/'}
+    }
+    incidents = AnomalyDetector.process_system_telemetry(test_server, high_telemetry, [])
+    assert len(incidents) == 1
+    cpu_inc = incidents[0]
+    assert cpu_inc.status == Incident.Status.OPEN
+
+    # Step 2: Telemetry normalizes (CPU drops to 25%)
+    normal_telemetry = {
+        'cpu': {'cpu_percent': 25.0},
+        'memory': {'memory_percent': 40.0, 'swap_percent': 0.0},
+        'disk': {'disk_percent': 50.0, 'mountpoint': '/'}
+    }
+    AnomalyDetector.process_system_telemetry(test_server, normal_telemetry, [])
+    cpu_inc.refresh_from_db()
+    assert cpu_inc.status == Incident.Status.RESOLVED
+    assert cpu_inc.resolved_at is not None
+

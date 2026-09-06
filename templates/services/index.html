@@ -111,6 +111,8 @@
                                 <input type="hidden" name="action" value="restart">
                                 <button type="submit" class="btn btn-warning btn-sm">Restart Service</button>
                             </form>
+                            {% elif not user_can_remediate %}
+                            <span style="font-size: 11px; color: var(--text-secondary); padding: 0.25rem 0.5rem; background: var(--border-light); border-radius: 4px;">Read-Only</span>
                             {% endif %}
                         </div>
                     </td>

@@ -4,8 +4,8 @@
 {% block breadcrumb %}Real-Time Operations Command Center{% endblock %}
 
 {% block content %}
-<!-- Top KPI Summary Cards -->
-<div class="grid-4">
+<!-- Top KPI Summary Cards (8 Core Infrastructure Cards) -->
+<div class="grid-4" style="margin-bottom: 1rem;">
     <div class="kpi-card">
         <span class="kpi-label">Total Servers</span>
         <span class="kpi-value">{{ total_servers }}</span>
@@ -16,6 +16,21 @@
         <span class="kpi-value" style="color: var(--success);">{{ healthy_servers }}</span>
         <span class="kpi-subtext">Operating Normality</span>
     </div>
+    <div class="kpi-card">
+        <span class="kpi-label">Online Servers</span>
+        <span class="kpi-value" style="color: var(--blue);">{{ online_servers }}</span>
+        <span class="kpi-subtext">Reachable & Active</span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">Offline / Critical</span>
+        <span class="kpi-value" style="color: {% if offline_servers or critical_servers %}var(--critical){% else %}var(--text-heading){% endif %};">
+            {{ offline_servers|add:critical_servers }}
+        </span>
+        <span class="kpi-subtext">Requires Attention</span>
+    </div>
+</div>
+
+<div class="grid-4" style="margin-bottom: 1.5rem;">
     <div class="kpi-card">
         <span class="kpi-label">Active Incidents</span>
         <span class="kpi-value" style="color: {% if active_incidents_count %}var(--warning){% else %}var(--text-heading){% endif %};">
@@ -28,18 +43,39 @@
         <span class="kpi-value" style="color: {% if critical_incidents_count %}var(--critical){% else %}var(--text-heading){% endif %};">
             {{ critical_incidents_count }}
         </span>
-        <span class="kpi-subtext">Immediate Attention</span>
+        <span class="kpi-subtext">High Priority Outages</span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">Security Events</span>
+        <span class="kpi-value" style="color: {% if security_events_count %}var(--warning){% else %}var(--text-heading){% endif %};">
+            {{ security_events_count }}
+        </span>
+        <span class="kpi-subtext">SSH & Auth Alerts</span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">Pending Remediation</span>
+        <span class="kpi-value" style="color: {% if pending_remediations_count %}var(--warning){% else %}var(--text-heading){% endif %};">
+            {{ pending_remediations_count }}
+        </span>
+        <span class="kpi-subtext">Awaiting Admin Approval</span>
     </div>
 </div>
 
-<!-- Server Filter & Quick Switcher -->
-<div class="form-inline-filter" style="justify-content: space-between;">
-    <form method="GET" action="{% url 'dashboard' %}" style="display: flex; gap: 0.75rem; align-items: center;">
-        <label class="form-label" style="margin: 0;" for="server_id">Active Host:</label>
-        <select name="server_id" id="server_id" class="form-select" style="width: 280px;" onchange="this.form.submit()">
+<!-- Non-Linux Development Host Notification -->
+{% if not is_linux and current_server.is_local %}
+<div class="alert-box alert-info" style="margin-bottom: 1.25rem;">
+    <strong>ℹ️ Operating System Notice:</strong> Running on Windows development host. Real hardware counters (CPU, RAM, Disk, Processes, Network) are ingested via <code>psutil</code>. Run LinuxGuard on <strong>Ubuntu / Linux</strong> for live systemd unit management (<code>systemctl</code>), system journals (<code>journalctl</code>), and authentication auditing (<code>/var/log/auth.log</code>).
+</div>
+{% endif %}
+
+<!-- Server Filter & Host Metadata Bar -->
+<div class="form-inline-filter" style="justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+    <form method="GET" action="{% url 'dashboard' %}" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+        <label class="form-label" style="margin: 0; font-weight: 600;" for="server_id">Active Host:</label>
+        <select name="server_id" id="server_id" class="form-select" style="min-width: 320px;" onchange="this.form.submit()">
             {% for s in servers %}
             <option value="{{ s.id }}" {% if current_server.id == s.id %}selected{% endif %}>
-                {{ s.hostname }} ({{ s.ip_address }}) [{{ s.get_status_display }}]
+                {{ s.hostname }} ({{ s.ip_address }}) {% if s.is_local %}[Real Host Telemetry]{% else %}[Demo Server]{% endif %}
             </option>
             {% endfor %}
         </select>
@@ -48,12 +84,17 @@
         </noscript>
     </form>
 
-    <div style="display: flex; gap: 0.5rem; align-items: center;">
+    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+        {% if current_server.is_local %}
+        <span class="badge badge-info">Real Host Node</span>
+        {% else %}
+        <span class="badge badge-secondary">Demo / Sample Node</span>
+        {% endif %}
         <span class="badge {% if current_server.status == 'ONLINE' %}badge-success{% elif current_server.status == 'CRITICAL' %}badge-danger{% else %}badge-warning{% endif %}">
-            {{ current_server.get_status_display }}
+            Status: {{ current_server.get_status_display }}
         </span>
-        <span style="font-size: 12px; color: var(--text-secondary);">
-            OS: {{ current_server.operating_system }} | Last seen: {{ current_server.last_seen|date:"H:i:s" }}
+        <span style="font-size: 12.5px; color: var(--text-secondary);">
+            OS: <strong>{{ current_server.operating_system }}</strong> | Kernel: <strong>{{ current_server.kernel_version|default:"Linux Core" }}</strong> | Last seen: {{ current_server.last_seen|timesince }} ago
         </span>
     </div>
 </div>
@@ -252,7 +293,7 @@
                     {% empty %}
                     <tr>
                         <td colspan="3" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
-                            No services registered. Click 'Sample Telemetry' to interrogate daemons.
+                            No services recorded. Click 'Refresh Host Telemetry' to interrogate daemons.
                         </td>
                     </tr>
                     {% endfor %}

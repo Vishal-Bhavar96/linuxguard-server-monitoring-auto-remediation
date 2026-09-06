@@ -36,7 +36,9 @@
                             {{ s.hostname }}
                         </a>
                         {% if s.is_local %}
-                        <span class="badge badge-info" style="margin-left: 4px;">Local Host</span>
+                        <span class="badge badge-info" style="margin-left: 4px;">Real Host</span>
+                        {% else %}
+                        <span class="badge badge-secondary" style="margin-left: 4px;">Demo Node</span>
                         {% endif %}
                     </td>
                     <td><code>{{ s.ip_address }}</code></td>
@@ -46,7 +48,7 @@
                             {{ s.get_status_display }}
                         </span>
                     </td>
-                    <td>{{ s.last_seen|date:"M d, Y H:i:s" }}</td>
+                    <td>{{ s.last_seen|timesince }} ago</td>
                     <td>
                         {% if s.open_incident_count %}
                         <span class="badge badge-danger">{{ s.open_incident_count }} Active</span>
@@ -67,7 +69,7 @@
                 {% empty %}
                 <tr>
                     <td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                        No servers registered. Click 'Register New Server' or sample host telemetry.
+                        No servers registered. Click 'Register New Server' or refresh host telemetry.
                     </td>
                 </tr>
                 {% endfor %}

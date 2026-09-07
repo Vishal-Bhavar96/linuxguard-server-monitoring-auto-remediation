@@ -4,7 +4,7 @@
 [![Django](https://img.shields.io/badge/Django-5.0%2B-092E20.svg)](https://www.djangoproject.com/)
 [![Ubuntu](https://img.shields.io/badge/Platform-Ubuntu%20%2F%20Linux-E95420.svg)](https://ubuntu.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-36%20Passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-40%20Passed-brightgreen.svg)](tests/)
 [![Architecture](https://img.shields.io/badge/Frontend-SSR%20(No%20JS)-success.svg)](templates/)
 
 ---
@@ -320,6 +320,7 @@ linuxguard-server-monitoring-auto-remediation/
     ├── test_disk_monitor.py         # Disk and network telemetry tests
     ├── test_log_analyzer.py         # Log parser and brute force tests
     ├── test_process_monitor.py      # Process enumeration tests
+    ├── test_remediation_verification.py # Remediation execution & verification tests
     ├── test_service_monitor.py      # Service checker and mock tests
     ├── test_severity_engine.py      # Severity and root cause diagnosis tests
     └── test_system_monitor.py       # psutil hardware extraction tests
@@ -355,7 +356,7 @@ LinuxGuard utilizes the **Django ORM** for persistent relational storage while a
 ### Relational Schema Entities
 
 1. **`monitoring_user`**: Custom user table with role column (`ADMIN`, `OPERATOR`, `VIEWER`), department, and hashed credentials.
-2. **`monitoring_server`**: Monitored hosts with hostname, IP address, OS, status, and heartbeat timestamps.
+2. **`monitoring_server`**: Monitored hosts with hostname, IP address, OS, kernel version, status, and heartbeat timestamps.
 3. **`monitoring_systemmetric`**: Time-series telemetry snapshots (CPU %, RAM %, Disk %, Network I/O, Load average).
 4. **`monitoring_processmetric`**: Process snapshot records linked to host servers.
 5. **`monitoring_servicestatus`**: Health states of monitored systemd units.
@@ -467,7 +468,7 @@ python manage.py monitor_server --server-id 1 --interval 15
 ```bash
 pytest -v
 ```
-*(All 36 tests pass cleanly)*
+*(All 40 tests pass cleanly)*
 
 ---
 

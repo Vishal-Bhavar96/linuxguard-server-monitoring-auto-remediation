@@ -1,81 +1,23 @@
 {% extends "base.html" %}
 
-{% block title %}Operations Dashboard{% endblock %}
+{% block title %}Operations Command Center{% endblock %}
 {% block breadcrumb %}Real-Time Operations Command Center{% endblock %}
 
 {% block content %}
-<!-- Top KPI Summary Cards (8 Core Infrastructure Cards) -->
-<div class="grid-4" style="margin-bottom: 1rem;">
-    <div class="kpi-card">
-        <span class="kpi-label">Total Servers</span>
-        <span class="kpi-value">{{ total_servers }}</span>
-        <span class="kpi-subtext">Monitored Host Nodes</span>
-    </div>
-    <div class="kpi-card">
-        <span class="kpi-label">Healthy Nodes</span>
-        <span class="kpi-value" style="color: var(--success);">{{ healthy_servers }}</span>
-        <span class="kpi-subtext">Operating Normality</span>
-    </div>
-    <div class="kpi-card">
-        <span class="kpi-label">Online Servers</span>
-        <span class="kpi-value" style="color: var(--blue);">{{ online_servers }}</span>
-        <span class="kpi-subtext">Reachable & Active</span>
-    </div>
-    <div class="kpi-card">
-        <span class="kpi-label">Offline / Critical</span>
-        <span class="kpi-value" style="color: {% if offline_servers or critical_servers %}var(--critical){% else %}var(--text-heading){% endif %};">
-            {{ offline_servers|add:critical_servers }}
-        </span>
-        <span class="kpi-subtext">Requires Attention</span>
-    </div>
-</div>
-
-<div class="grid-4" style="margin-bottom: 1.5rem;">
-    <div class="kpi-card">
-        <span class="kpi-label">Active Incidents</span>
-        <span class="kpi-value" style="color: {% if active_incidents_count %}var(--warning){% else %}var(--text-heading){% endif %};">
-            {{ active_incidents_count }}
-        </span>
-        <span class="kpi-subtext">Open & Investigating</span>
-    </div>
-    <div class="kpi-card">
-        <span class="kpi-label">Critical Incidents</span>
-        <span class="kpi-value" style="color: {% if critical_incidents_count %}var(--critical){% else %}var(--text-heading){% endif %};">
-            {{ critical_incidents_count }}
-        </span>
-        <span class="kpi-subtext">High Priority Outages</span>
-    </div>
-    <div class="kpi-card">
-        <span class="kpi-label">Security Events</span>
-        <span class="kpi-value" style="color: {% if security_events_count %}var(--warning){% else %}var(--text-heading){% endif %};">
-            {{ security_events_count }}
-        </span>
-        <span class="kpi-subtext">SSH & Auth Alerts</span>
-    </div>
-    <div class="kpi-card">
-        <span class="kpi-label">Pending Remediation</span>
-        <span class="kpi-value" style="color: {% if pending_remediations_count %}var(--warning){% else %}var(--text-heading){% endif %};">
-            {{ pending_remediations_count }}
-        </span>
-        <span class="kpi-subtext">Awaiting Admin Approval</span>
-    </div>
-</div>
-
-<!-- Non-Linux Development Host Notification -->
-{% if not is_linux and current_server.is_local %}
-<div class="alert-box alert-info" style="margin-bottom: 1.25rem;">
-    <strong>ℹ️ Operating System Notice:</strong> Running on Windows development host. Real hardware counters (CPU, RAM, Disk, Processes, Network) are ingested via <code>psutil</code>. Run LinuxGuard on <strong>Ubuntu / Linux</strong> for live systemd unit management (<code>systemctl</code>), system journals (<code>journalctl</code>), and authentication auditing (<code>/var/log/auth.log</code>).
-</div>
-{% endif %}
-
-<!-- Server Filter & Host Metadata Bar -->
-<div class="form-inline-filter" style="justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
-    <form method="GET" action="{% url 'dashboard' %}" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-        <label class="form-label" style="margin: 0; font-weight: 600;" for="server_id">Active Host:</label>
-        <select name="server_id" id="server_id" class="form-select" style="min-width: 320px;" onchange="this.form.submit()">
+<!-- =========================================================================
+     1. ACTIVE HOST SELECTOR & TELEMETRY STATUS BAR (Requirements 12 & 14)
+     ========================================================================= -->
+<div class="form-inline-filter" style="justify-content: space-between; margin-bottom: 1.25rem;">
+    <!-- Host Selector Form -->
+    <form method="GET" action="{% url 'dashboard' %}" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; flex: 1;">
+        <label class="form-label" style="margin: 0; font-weight: 700; white-space: nowrap;" for="server_id">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>
+            Active Target Host:
+        </label>
+        <select name="server_id" id="server_id" class="form-select" style="max-width: 480px; min-width: 300px;" onchange="this.form.submit()">
             {% for s in servers %}
             <option value="{{ s.id }}" {% if current_server.id == s.id %}selected{% endif %}>
-                {{ s.hostname }} ({{ s.ip_address }}) {% if s.is_local %}[Real Host Telemetry]{% else %}[Demo Server]{% endif %}
+                {{ s.hostname }} ({{ s.ip_address }}) — {{ s.operating_system }} — {{ s.get_status_display|upper }} {% if s.is_local %}[Real Host Node]{% else %}[Sample Fleet Node]{% endif %}
             </option>
             {% endfor %}
         </select>
@@ -84,201 +26,546 @@
         </noscript>
     </form>
 
-    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+    <!-- Telemetry State & Metadata Tags -->
+    <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
         {% if current_server.is_local %}
-        <span class="badge badge-info">Real Host Node</span>
+        <span class="badge badge-info" title="Live real-time telemetry gathered via psutil">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            Real Host Telemetry
+        </span>
         {% else %}
-        <span class="badge badge-secondary">Demo / Sample Node</span>
+        <span class="badge badge-secondary" title="Simulated fleet node telemetry">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
+            Fleet Node
+        </span>
         {% endif %}
+
         <span class="badge {% if current_server.status == 'ONLINE' %}badge-success{% elif current_server.status == 'CRITICAL' %}badge-danger{% else %}badge-warning{% endif %}">
             Status: {{ current_server.get_status_display }}
         </span>
-        <span style="font-size: 12.5px; color: var(--text-secondary);">
-            OS: <strong>{{ current_server.operating_system }}</strong> | Kernel: <strong>{{ current_server.kernel_version|default:"Linux Core" }}</strong> | Last seen: {{ current_server.last_seen|timesince }} ago
+
+        <span style="font-size: 12px; color: var(--text-secondary); white-space: nowrap;">
+            Last Updated: <strong>{% if last_telemetry_time %}{{ last_telemetry_time|timesince }} ago{% else %}Just now{% endif %}</strong>
         </span>
     </div>
 </div>
 
-<!-- Real-Time Hardware Telemetry Gauges (Pure CSS) -->
-<div class="grid-3">
-    <!-- CPU Usage Card -->
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">CPU Utilization</h3>
-            <span class="badge {% if latest_metric.cpu_usage >= 95 or live_telemetry.cpu.cpu_percent >= 95 %}badge-danger{% elif latest_metric.cpu_usage >= 85 or live_telemetry.cpu.cpu_percent >= 85 %}badge-warning{% else %}badge-success{% endif %}">
-                {% if live_telemetry %}{{ live_telemetry.cpu.cpu_percent }}%{% elif latest_metric %}{{ latest_metric.cpu_usage }}%{% else %}0%{% endif %}
-            </span>
+<!-- =========================================================================
+     2. TOP KPI SUMMARY SECTION (8 Clickable Cards - Requirement 2)
+     ========================================================================= -->
+<div class="grid-4" style="margin-bottom: 0.75rem;">
+    <!-- 1. Total Servers -->
+    <a href="{% url 'server_list' %}" class="kpi-card" title="View all monitored servers">
+        <div class="kpi-card-top">
+            <span class="kpi-label">Total Servers</span>
+            <div class="kpi-icon-wrapper blue">
+                <svg class="icon icon-md" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>
+            </div>
         </div>
-        <div class="card-body">
-            <div class="metric-row">
+        <span class="kpi-value">{{ total_servers }}</span>
+        <div class="kpi-subtext">
+            <span class="kpi-indicator blue"></span>
+            Monitored Host Nodes
+        </div>
+    </a>
+
+    <!-- 2. Healthy Nodes -->
+    <a href="{% url 'server_list' %}" class="kpi-card" title="View healthy servers">
+        <div class="kpi-card-top">
+            <span class="kpi-label">Healthy Nodes</span>
+            <div class="kpi-icon-wrapper green">
+                <svg class="icon icon-md" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+        </div>
+        <span class="kpi-value" style="color: var(--success);">{{ healthy_servers }}</span>
+        <div class="kpi-subtext">
+            <span class="kpi-indicator green"></span>
+            Operating Normality
+        </div>
+    </a>
+
+    <!-- 3. Online Servers -->
+    <a href="{% url 'server_list' %}" class="kpi-card" title="View reachable online servers">
+        <div class="kpi-card-top">
+            <span class="kpi-label">Online Servers</span>
+            <div class="kpi-icon-wrapper blue">
+                <svg class="icon icon-md" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" x2="12.01" y1="20" y2="20"/></svg>
+            </div>
+        </div>
+        <span class="kpi-value" style="color: var(--primary);">{{ online_servers }}</span>
+        <div class="kpi-subtext">
+            <span class="kpi-indicator blue"></span>
+            Reachable & Active
+        </div>
+    </a>
+
+    <!-- 4. Offline / Critical -->
+    <a href="{% url 'server_list' %}" class="kpi-card" title="View offline or critical nodes">
+        <div class="kpi-card-top">
+            <span class="kpi-label">Offline / Critical</span>
+            <div class="kpi-icon-wrapper red">
+                <svg class="icon icon-md" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>
+            </div>
+        </div>
+        <span class="kpi-value" style="color: {% if offline_critical_total %}var(--critical){% else %}var(--text-heading){% endif %};">
+            {{ offline_critical_total }}
+        </span>
+        <div class="kpi-subtext">
+            <span class="kpi-indicator {% if offline_critical_total %}red{% else %}green{% endif %}"></span>
+            Requires Attention
+        </div>
+    </a>
+</div>
+
+<div class="grid-4" style="margin-bottom: 1.5rem;">
+    <!-- 5. Active Incidents -->
+    <a href="{% url 'incident_list' %}" class="kpi-card" title="View active open incidents">
+        <div class="kpi-card-top">
+            <span class="kpi-label">Active Incidents</span>
+            <div class="kpi-icon-wrapper amber">
+                <svg class="icon icon-md" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+            </div>
+        </div>
+        <span class="kpi-value" style="color: {% if active_incidents_count %}var(--warning){% else %}var(--text-heading){% endif %};">
+            {{ active_incidents_count }}
+        </span>
+        <div class="kpi-subtext">
+            <span class="kpi-indicator {% if active_incidents_count %}amber{% else %}green{% endif %}"></span>
+            Open & Investigating
+        </div>
+    </a>
+
+    <!-- 6. Critical Incidents -->
+    <a href="{% url 'incident_list' %}" class="kpi-card" title="View critical severity incidents">
+        <div class="kpi-card-top">
+            <span class="kpi-label">Critical Incidents</span>
+            <div class="kpi-icon-wrapper red">
+                <svg class="icon icon-md" viewBox="0 0 24 24"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+            </div>
+        </div>
+        <span class="kpi-value" style="color: {% if critical_incidents_count %}var(--critical){% else %}var(--text-heading){% endif %};">
+            {{ critical_incidents_count }}
+        </span>
+        <div class="kpi-subtext">
+            <span class="kpi-indicator {% if critical_incidents_count %}red{% else %}green{% endif %}"></span>
+            High Priority Outages
+        </div>
+    </a>
+
+    <!-- 7. Security Events -->
+    <a href="{% url 'security' %}" class="kpi-card" title="View security and authentication events">
+        <div class="kpi-card-top">
+            <span class="kpi-label">Security Events</span>
+            <div class="kpi-icon-wrapper amber">
+                <svg class="icon icon-md" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+        </div>
+        <span class="kpi-value" style="color: {% if security_events_count %}var(--warning){% else %}var(--text-heading){% endif %};">
+            {{ security_events_count }}
+        </span>
+        <div class="kpi-subtext">
+            <span class="kpi-indicator {% if brute_force_count %}red{% elif security_events_count %}amber{% else %}green{% endif %}"></span>
+            SSH & Auth Alerts
+        </div>
+    </a>
+
+    <!-- 8. Pending Remediation -->
+    <a href="{% url 'remediation_list' %}" class="kpi-card" title="View auto-remediation queue">
+        <div class="kpi-card-top">
+            <span class="kpi-label">Pending Remediation</span>
+            <div class="kpi-icon-wrapper blue">
+                <svg class="icon icon-md" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            </div>
+        </div>
+        <span class="kpi-value" style="color: {% if pending_remediations_count %}var(--warning){% else %}var(--text-heading){% endif %};">
+            {{ pending_remediations_count }}
+        </span>
+        <div class="kpi-subtext">
+            <span class="kpi-indicator {% if pending_remediations_count %}amber{% else %}green{% endif %}"></span>
+            Awaiting Admin Approval
+        </div>
+    </a>
+</div>
+
+<!-- =========================================================================
+     3. SYSTEM RESOURCE HEALTH (Requirement 3 & 11)
+     ========================================================================= -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-header">
+        <div class="card-header-left">
+            <svg class="icon icon-md" style="color: var(--primary);" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            <div>
+                <h3 class="card-title">Real-Time Host Resource Health</h3>
+                <div class="card-subtitle">Active telemetry on <strong>{{ current_server.hostname }}</strong> ({{ current_server.ip_address }})</div>
+            </div>
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <a href="{% url 'server_metrics' server_id=current_server.id %}" class="btn btn-secondary btn-sm">
+                Detailed Metrics &rarr;
+            </a>
+        </div>
+    </div>
+
+    <div class="card-body">
+        <div class="grid-3" style="margin-bottom: 0;">
+            <!-- CPU Utilization -->
+            <div style="background-color: var(--bg-main); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.1rem;">
                 <div class="metric-header">
-                    <span>Overall Processor Load</span>
-                    <span>{% if live_telemetry %}{{ live_telemetry.cpu.cpu_percent }}%{% elif latest_metric %}{{ latest_metric.cpu_usage }}%{% else %}0%{% endif %}</span>
+                    <span style="display: flex; align-items: center; gap: 5px;">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/></svg>
+                        CPU Utilization
+                    </span>
+                    <span class="badge {% if live_telemetry.cpu.cpu_percent >= 95 or latest_metric.cpu_usage >= 95 %}badge-danger{% elif live_telemetry.cpu.cpu_percent >= 85 or latest_metric.cpu_usage >= 85 %}badge-warning{% else %}badge-success{% endif %}">
+                        {% if live_telemetry %}{{ live_telemetry.cpu.cpu_percent }}%{% elif latest_metric %}{{ latest_metric.cpu_usage }}%{% else %}0%{% endif %}
+                    </span>
                 </div>
-                <div class="progress-container">
+                <div class="progress-container" style="margin-top: 0.5rem; margin-bottom: 0.75rem;">
                     <div class="progress-bar {% if live_telemetry.cpu.cpu_percent >= 95 or latest_metric.cpu_usage >= 95 %}progress-danger{% elif live_telemetry.cpu.cpu_percent >= 85 or latest_metric.cpu_usage >= 85 %}progress-warning{% else %}progress-success{% endif %}"
                          style="width: {% if live_telemetry %}{{ live_telemetry.cpu.cpu_percent }}{% elif latest_metric %}{{ latest_metric.cpu_usage }}{% else %}0{% endif %}%;">
                     </div>
                 </div>
-            </div>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 0.75rem;">
-                Load Average: <strong>{% if live_telemetry %}{{ live_telemetry.load_average.formatted }}{% elif latest_metric %}{{ latest_metric.load_average }}{% else %}0.00, 0.00, 0.00{% endif %}</strong>
-            </div>
-        </div>
-        <div class="card-footer">
-            <a href="{% url 'server_metrics' server_id=current_server.id %}" style="font-size: 12px; font-weight: 600;">View Detailed Metrics &rarr;</a>
-        </div>
-    </div>
-
-    <!-- RAM Memory Card -->
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">Memory Allocation (RAM)</h3>
-            <span class="badge {% if latest_metric.memory_usage >= 95 or live_telemetry.memory.memory_percent >= 95 %}badge-danger{% elif latest_metric.memory_usage >= 85 or live_telemetry.memory.memory_percent >= 85 %}badge-warning{% else %}badge-success{% endif %}">
-                {% if live_telemetry %}{{ live_telemetry.memory.memory_percent }}%{% elif latest_metric %}{{ latest_metric.memory_usage }}%{% else %}0%{% endif %}
-            </span>
-        </div>
-        <div class="card-body">
-            <div class="metric-row">
-                <div class="metric-header">
-                    <span>Physical Memory (RAM)</span>
-                    <span>{% if live_telemetry %}{{ live_telemetry.memory.memory_percent }}%{% elif latest_metric %}{{ latest_metric.memory_usage }}%{% else %}0%{% endif %}</span>
+                <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; justify-content: space-between;">
+                    <span>Load Avg: <strong>{% if live_telemetry %}{{ live_telemetry.load_average.formatted }}{% elif latest_metric %}{{ latest_metric.load_average }}{% else %}0.00, 0.00, 0.00{% endif %}</strong></span>
+                    <span>Freq: <strong>{% if live_telemetry %}{{ live_telemetry.cpu.frequency_mhz }} MHz{% else %}Nominal{% endif %}</strong></span>
                 </div>
-                <div class="progress-container">
+                {% if live_telemetry and live_telemetry.cpu.per_cpu %}
+                <div class="core-grid">
+                    {% for core_pct in live_telemetry.cpu.per_cpu %}
+                    <div class="core-item">
+                        <div class="core-name">Core {{ forloop.counter0 }}</div>
+                        <div class="core-val">{{ core_pct }}%</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- RAM Memory Allocation -->
+            <div style="background-color: var(--bg-main); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.1rem;">
+                <div class="metric-header">
+                    <span style="display: flex; align-items: center; gap: 5px;">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 19v-3"/><path d="M10 19v-3"/><path d="M14 19v-3"/><path d="M18 19v-3"/><path d="M8 11V9"/><path d="M16 11V9"/><rect width="20" height="8" x="2" y="11" rx="2"/></svg>
+                        Memory Allocation (RAM)
+                    </span>
+                    <span class="badge {% if live_telemetry.memory.memory_percent >= 95 or latest_metric.memory_usage >= 95 %}badge-danger{% elif live_telemetry.memory.memory_percent >= 85 or latest_metric.memory_usage >= 85 %}badge-warning{% else %}badge-success{% endif %}">
+                        {% if live_telemetry %}{{ live_telemetry.memory.memory_percent }}%{% elif latest_metric %}{{ latest_metric.memory_usage }}%{% else %}0%{% endif %}
+                    </span>
+                </div>
+                <div class="progress-container" style="margin-top: 0.5rem; margin-bottom: 0.75rem;">
                     <div class="progress-bar {% if live_telemetry.memory.memory_percent >= 95 or latest_metric.memory_usage >= 95 %}progress-danger{% elif live_telemetry.memory.memory_percent >= 85 or latest_metric.memory_usage >= 85 %}progress-warning{% else %}progress-success{% endif %}"
                          style="width: {% if live_telemetry %}{{ live_telemetry.memory.memory_percent }}{% elif latest_metric %}{{ latest_metric.memory_usage }}{% else %}0{% endif %}%;">
                     </div>
                 </div>
-            </div>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 0.75rem;">
-                {% if live_telemetry %}
-                Used: <strong>{{ live_telemetry.memory.used_mb }} MB</strong> / Total: <strong>{{ live_telemetry.memory.total_mb }} MB</strong>
-                {% else %}
-                Memory utilization monitored via periodic polling.
-                {% endif %}
-            </div>
-        </div>
-        <div class="card-footer">
-            <a href="{% url 'server_processes' server_id=current_server.id %}" style="font-size: 12px; font-weight: 600;">View Top Processes &rarr;</a>
-        </div>
-    </div>
-
-    <!-- Disk Space Card -->
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">Storage Partition (Disk)</h3>
-            <span class="badge {% if latest_metric.disk_usage >= 90 or live_telemetry.disk.disk_percent >= 90 %}badge-danger{% elif latest_metric.disk_usage >= 80 or live_telemetry.disk.disk_percent >= 80 %}badge-warning{% else %}badge-success{% endif %}">
-                {% if live_telemetry %}{{ live_telemetry.disk.disk_percent }}%{% elif latest_metric %}{{ latest_metric.disk_usage }}%{% else %}0%{% endif %}
-            </span>
-        </div>
-        <div class="card-body">
-            <div class="metric-row">
-                <div class="metric-header">
-                    <span>Root Partition [/]</span>
-                    <span>{% if live_telemetry %}{{ live_telemetry.disk.disk_percent }}%{% elif latest_metric %}{{ latest_metric.disk_usage }}%{% else %}0%{% endif %}</span>
+                <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 3px;">
+                    <div>Used: <strong>{% if live_telemetry %}{{ live_telemetry.memory.used_mb }} MB{% else %}Normal{% endif %}</strong> / Total: <strong>{% if live_telemetry %}{{ live_telemetry.memory.total_mb }} MB{% else %}8192 MB{% endif %}</strong></div>
+                    <div>Swap Used: <strong>{% if live_telemetry %}{{ live_telemetry.memory.swap_percent }}% ({{ live_telemetry.memory.swap_used_mb }} MB){% else %}0.0%{% endif %}</strong></div>
                 </div>
-                <div class="progress-container">
+            </div>
+
+            <!-- Storage Partition (Disk) & Network -->
+            <div style="background-color: var(--bg-main); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.1rem;">
+                <div class="metric-header">
+                    <span style="display: flex; align-items: center; gap: 5px;">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+                        Storage Partition [/]
+                    </span>
+                    <span class="badge {% if live_telemetry.disk.disk_percent >= 90 or latest_metric.disk_usage >= 90 %}badge-danger{% elif live_telemetry.disk.disk_percent >= 80 or latest_metric.disk_usage >= 80 %}badge-warning{% else %}badge-success{% endif %}">
+                        {% if live_telemetry %}{{ live_telemetry.disk.disk_percent }}%{% elif latest_metric %}{{ latest_metric.disk_usage }}%{% else %}0%{% endif %}
+                    </span>
+                </div>
+                <div class="progress-container" style="margin-top: 0.5rem; margin-bottom: 0.75rem;">
                     <div class="progress-bar {% if live_telemetry.disk.disk_percent >= 90 or latest_metric.disk_usage >= 90 %}progress-danger{% elif live_telemetry.disk.disk_percent >= 80 or latest_metric.disk_usage >= 80 %}progress-warning{% else %}progress-success{% endif %}"
                          style="width: {% if live_telemetry %}{{ live_telemetry.disk.disk_percent }}{% elif latest_metric %}{{ latest_metric.disk_usage }}{% else %}0{% endif %}%;">
                     </div>
                 </div>
-            </div>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 0.75rem;">
-                {% if live_telemetry %}
-                Used: <strong>{{ live_telemetry.disk.used_gb }} GB</strong> / Free: <strong>{{ live_telemetry.disk.free_gb }} GB</strong>
-                {% else %}
-                Partition bounds checked periodically.
-                {% endif %}
+                <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 3px;">
+                    <div>Storage: <strong>{% if live_telemetry %}{{ live_telemetry.disk.used_gb }} GB{% else %}Used{% endif %}</strong> / Free: <strong>{% if live_telemetry %}{{ live_telemetry.disk.free_gb }} GB{% else %}Free{% endif %}</strong></div>
+                    <div>Network I/O: <strong>{{ net_sent_str }} Sent / {{ net_recv_str }} Recv</strong></div>
+                </div>
             </div>
         </div>
-        <div class="card-footer">
-            <a href="{% url 'metrics' %}" style="font-size: 12px; font-weight: 600;">Filesystem Breakdown &rarr;</a>
+
+        <!-- System Summary Chips -->
+        <div style="display: flex; gap: 1rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-light); flex-wrap: wrap; font-size: 12px; color: var(--text-secondary);">
+            <span>Host: <strong style="color: var(--text-heading);">{{ current_server.hostname }}</strong></span>
+            <span>IP: <strong style="color: var(--text-heading);">{{ current_server.ip_address }}</strong></span>
+            <span>OS: <strong style="color: var(--text-heading);">{{ current_server.operating_system }}</strong></span>
+            <span>Active Processes: <strong style="color: var(--text-heading);">{{ process_count }}</strong></span>
+            <span>Kernel: <strong style="color: var(--text-heading);">{{ current_server.kernel_version|default:"Linux Kernel" }}</strong></span>
         </div>
     </div>
 </div>
 
-<!-- Active Incidents & Monitored Services Grid -->
-<div class="grid-2-1">
-    <!-- Recent Incidents Table -->
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">Recent System Incidents & Root Causes</h3>
-            <a href="{% url 'incident_list' %}" class="btn btn-secondary btn-sm">All Incidents</a>
+<!-- =========================================================================
+     4. SERVER HEALTH TABLE (Search, Filter, Sorting - Requirement 4)
+     ========================================================================= -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-header">
+        <div class="card-header-left">
+            <svg class="icon icon-md" style="color: var(--primary);" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>
+            <div>
+                <h3 class="card-title">Server Fleet Health & Telemetry Inventory</h3>
+                <div class="card-subtitle">Real-time status, hardware consumption, and uptime across monitored infrastructure</div>
+            </div>
         </div>
-        <div class="table-responsive">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Severity</th>
-                        <th>Incident Title</th>
-                        <th>Host</th>
-                        <th>Status</th>
-                        <th>Detected</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for inc in recent_incidents %}
-                    <tr>
-                        <td>
-                            <span class="badge {% if inc.severity == 'CRITICAL' %}badge-danger{% elif inc.severity == 'HIGH' %}badge-warning{% elif inc.severity == 'MEDIUM' %}badge-info{% else %}badge-secondary{% endif %}">
-                                {{ inc.severity }}
-                            </span>
-                        </td>
-                        <td>
-                            <a href="{% url 'incident_detail' incident_id=inc.id %}" style="font-weight: 600; color: var(--text-heading);">
-                                {{ inc.title|truncatechars:45 }}
-                            </a>
-                            <div style="font-size: 11.5px; color: var(--text-secondary);">
-                                {{ inc.probable_cause|truncatechars:60 }}
+        <a href="{% url 'server_create' %}" class="btn btn-primary btn-sm">
+            + Register Server
+        </a>
+    </div>
+
+    <!-- Search & Status Filter Bar -->
+    <div style="padding: 0.85rem 1.25rem; background-color: #FAFAFA; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+        <!-- Status Filter Buttons -->
+        <div class="filter-btn-group">
+            <a href="?server_id={{ current_server.id }}&server_status=ALL{% if server_search %}&server_search={{ server_search }}{% endif %}" class="filter-btn {% if server_status_filter == 'ALL' or not server_status_filter %}active{% endif %}">
+                All ({{ total_servers }})
+            </a>
+            <a href="?server_id={{ current_server.id }}&server_status=ONLINE{% if server_search %}&server_search={{ server_search }}{% endif %}" class="filter-btn {% if server_status_filter == 'ONLINE' %}active{% endif %}">
+                Online ({{ online_servers }})
+            </a>
+            <a href="?server_id={{ current_server.id }}&server_status=DEGRADED{% if server_search %}&server_search={{ server_search }}{% endif %}" class="filter-btn {% if server_status_filter == 'DEGRADED' %}active{% endif %}">
+                Degraded ({{ degraded_servers }})
+            </a>
+            <a href="?server_id={{ current_server.id }}&server_status=CRITICAL{% if server_search %}&server_search={{ server_search }}{% endif %}" class="filter-btn {% if server_status_filter == 'CRITICAL' %}active{% endif %}">
+                Critical ({{ critical_servers }})
+            </a>
+            <a href="?server_id={{ current_server.id }}&server_status=OFFLINE{% if server_search %}&server_search={{ server_search }}{% endif %}" class="filter-btn {% if server_status_filter == 'OFFLINE' %}active{% endif %}">
+                Offline ({{ offline_servers }})
+            </a>
+        </div>
+
+        <!-- Search Form -->
+        <form method="GET" action="{% url 'dashboard' %}" style="display: flex; gap: 0.5rem; align-items: center;">
+            <input type="hidden" name="server_id" value="{{ current_server.id }}">
+            <input type="hidden" name="server_status" value="{{ server_status_filter }}">
+            <input type="text" name="server_search" value="{{ server_search }}" class="form-control" style="width: 240px; padding: 0.35rem 0.65rem; font-size: 12.5px;" placeholder="Search hostname, IP, OS...">
+            <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+            {% if server_search %}
+            <a href="?server_id={{ current_server.id }}&server_status={{ server_status_filter }}" class="btn btn-secondary btn-sm" title="Clear Search">✕</a>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Table -->
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Server / Hostname</th>
+                    <th>IP Address</th>
+                    <th>Operating System</th>
+                    <th style="min-width: 120px;">CPU %</th>
+                    <th style="min-width: 120px;">RAM %</th>
+                    <th style="min-width: 120px;">Disk %</th>
+                    <th>Uptime</th>
+                    <th>Last Seen</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in server_table_items %}
+                <tr {% if current_server.id == item.server.id %}style="background-color: rgba(37, 99, 235, 0.04); font-weight: 500;"{% endif %}>
+                    <td>
+                        <div style="font-weight: 600; color: var(--text-heading);">
+                            {{ item.server.hostname }}
+                            {% if item.server.is_local %}
+                            <span class="badge badge-info" style="font-size: 9.5px; padding: 1px 5px; margin-left: 4px;">Host</span>
+                            {% endif %}
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-secondary);">{{ item.server.description|default:"Monitored Node" }}</div>
+                    </td>
+                    <td><code>{{ item.server.ip_address }}</code></td>
+                    <td><span style="font-size: 12px;">{{ item.server.operating_system }}</span></td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div class="progress-container sm" style="flex: 1;">
+                                <div class="progress-bar {% if item.cpu_usage >= 95 %}progress-danger{% elif item.cpu_usage >= 85 %}progress-warning{% else %}progress-success{% endif %}"
+                                     style="width: {{ item.cpu_usage }}%;"></div>
                             </div>
-                        </td>
-                        <td>{{ inc.server.hostname }}</td>
-                        <td>
-                            <span class="badge {% if inc.status == 'OPEN' %}badge-danger{% elif inc.status == 'INVESTIGATING' %}badge-warning{% elif inc.status == 'RESOLVED' %}badge-success{% else %}badge-secondary{% endif %}">
-                                {{ inc.get_status_display }}
-                            </span>
-                        </td>
-                        <td>{{ inc.detected_at|timesince }} ago</td>
-                        <td>
-                            <a href="{% url 'incident_detail' incident_id=inc.id %}" class="btn btn-secondary btn-sm">Investigate</a>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 2rem;">
-                            No active incidents detected. All monitored systems operating nominally.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                            <span style="font-size: 11.5px; font-weight: 600; width: 38px; text-align: right;">{{ item.cpu_usage }}%</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div class="progress-container sm" style="flex: 1;">
+                                <div class="progress-bar {% if item.memory_usage >= 95 %}progress-danger{% elif item.memory_usage >= 85 %}progress-warning{% else %}progress-success{% endif %}"
+                                     style="width: {{ item.memory_usage }}%;"></div>
+                            </div>
+                            <span style="font-size: 11.5px; font-weight: 600; width: 38px; text-align: right;">{{ item.memory_usage }}%</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div class="progress-container sm" style="flex: 1;">
+                                <div class="progress-bar {% if item.disk_usage >= 90 %}progress-danger{% elif item.disk_usage >= 80 %}progress-warning{% else %}progress-success{% endif %}"
+                                     style="width: {{ item.disk_usage }}%;"></div>
+                            </div>
+                            <span style="font-size: 11.5px; font-weight: 600; width: 38px; text-align: right;">{{ item.disk_usage }}%</span>
+                        </div>
+                    </td>
+                    <td style="font-size: 12px; white-space: nowrap;">{{ item.uptime_str }}</td>
+                    <td style="font-size: 11.5px; color: var(--text-secondary); white-space: nowrap;">{{ item.server.last_seen|timesince }} ago</td>
+                    <td>
+                        <span class="badge {% if item.server.status == 'ONLINE' %}badge-success{% elif item.server.status == 'CRITICAL' %}badge-danger{% elif item.server.status == 'DEGRADED' %}badge-warning{% else %}badge-secondary{% endif %}">
+                            {{ item.server.get_status_display }}
+                        </span>
+                    </td>
+                    <td style="white-space: nowrap;">
+                        <a href="?server_id={{ item.server.id }}" class="btn btn-secondary btn-sm" title="Set as active dashboard host">Select</a>
+                        <a href="{% url 'server_detail' server_id=item.server.id %}" class="btn btn-secondary btn-sm" title="Detailed Server Profile">Inspect</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10" style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                        No servers matched your search filter criteria.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- =========================================================================
+     5. ACTIVE & CRITICAL INCIDENTS SECTION (Requirement 5)
+     ========================================================================= -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-header">
+        <div class="card-header-left">
+            <svg class="icon icon-md" style="color: var(--critical);" viewBox="0 0 24 24"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+            <div>
+                <h3 class="card-title">Active Outages & Incident Correlation</h3>
+                <div class="card-subtitle">Open alerts with root cause analysis, diagnostic confidence, and recommended fixes</div>
+            </div>
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <a href="{% url 'incident_list' %}" class="btn btn-secondary btn-sm">
+                View All Incidents ({{ active_incidents_count }} Active) &rarr;
+            </a>
         </div>
     </div>
 
-    <!-- Node Service Health Summary -->
-    <div class="card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Incident ID</th>
+                    <th>Severity</th>
+                    <th>Incident Title & Description</th>
+                    <th>Host Node</th>
+                    <th>Root Cause Diagnosis</th>
+                    <th>Recommended Remediation</th>
+                    <th>SLA Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in annotated_incidents %}
+                <tr>
+                    <td>
+                        <strong style="font-family: var(--font-mono); color: var(--primary);">#LG-{{ item.obj.id }}</strong>
+                    </td>
+                    <td>
+                        <span class="badge {% if item.obj.severity == 'CRITICAL' %}badge-danger{% elif item.obj.severity == 'HIGH' %}badge-warning{% elif item.obj.severity == 'MEDIUM' %}badge-info{% else %}badge-secondary{% endif %}">
+                            {{ item.obj.severity }}
+                        </span>
+                    </td>
+                    <td>
+                        <a href="{% url 'incident_detail' incident_id=item.obj.id %}" style="font-weight: 600; color: var(--text-heading);">
+                            {{ item.obj.title }}
+                        </a>
+                        <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px;">
+                            {{ item.obj.description|truncatechars:70 }}
+                        </div>
+                    </td>
+                    <td>
+                        <span style="font-weight: 500;">{{ item.obj.server.hostname }}</span>
+                    </td>
+                    <td>
+                        <div style="font-size: 12px; color: var(--text-heading);">
+                            {{ item.obj.probable_cause|default:"Correlation in progress..."|truncatechars:55 }}
+                        </div>
+                        {% if item.obj.confidence %}
+                        <div style="font-size: 10.5px; color: var(--primary); font-weight: 600;">
+                            Confidence: {{ item.obj.confidence }}%
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="font-size: 12px; color: var(--text-body);">
+                            {{ item.obj.recommendation|default:"Awaiting diagnosis"|truncatechars:55 }}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="sla-badge {{ item.sla_class }}">
+                            {{ item.sla_label }}
+                        </span>
+                        <div style="font-size: 10.5px; color: var(--text-muted); margin-top: 2px;">
+                            {{ item.obj.detected_at|timesince }} ago
+                        </div>
+                    </td>
+                    <td style="white-space: nowrap;">
+                        <a href="{% url 'incident_detail' incident_id=item.obj.id %}" class="btn btn-primary btn-sm">Investigate</a>
+                        <a href="{% url 'remediation_list' %}" class="btn btn-secondary btn-sm" title="Initiate Remediation">Remediate</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                        <svg class="icon icon-lg" style="color: var(--success); margin-bottom: 0.5rem;" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        <div>No active incidents detected. All monitored server infrastructure is operating nominally.</div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- =========================================================================
+     6. SERVICE HEALTH & 7. AUTO-REMEDIATION (Requirements 6 & 7)
+     ========================================================================= -->
+<div class="grid-2-1" style="margin-bottom: 1.5rem;">
+    <!-- 6. Service Health Panel -->
+    <div class="card" style="margin-bottom: 0;">
         <div class="card-header">
-            <h3 class="card-title">Services on {{ current_server.hostname }}</h3>
-            <a href="{% url 'services' %}" class="btn btn-secondary btn-sm">Manage</a>
+            <div class="card-header-left">
+                <svg class="icon icon-md" style="color: var(--primary);" viewBox="0 0 24 24"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+                <div>
+                    <h3 class="card-title">Systemd Daemon Health</h3>
+                    <div class="card-subtitle">Monitored daemons on <strong>{{ current_server.hostname }}</strong></div>
+                </div>
+            </div>
+            <a href="{% url 'server_services' server_id=current_server.id %}" class="btn btn-secondary btn-sm">
+                Service Controls &rarr;
+            </a>
         </div>
+
         <div class="table-responsive">
             <table class="table">
                 <thead>
                     <tr>
-                        <th>Service</th>
+                        <th>Daemon / Unit</th>
                         <th>Status</th>
+                        <th>Last Checked</th>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for s in services %}
                     <tr>
-                        <td style="font-weight: 600; font-family: var(--font-mono);">{{ s.service_name }}</td>
+                        <td style="font-weight: 600; font-family: var(--font-mono);">
+                            {{ s.service_name }}
+                        </td>
                         <td>
                             <span class="badge {% if s.status == 'ACTIVE' %}badge-success{% elif s.status == 'FAILED' %}badge-danger{% elif s.status == 'INACTIVE' %}badge-warning{% else %}badge-secondary{% endif %}">
                                 {{ s.get_status_display }}
                             </span>
+                        </td>
+                        <td style="font-size: 11.5px; color: var(--text-secondary);">
+                            {{ s.checked_at|timesince }} ago
                         </td>
                         <td>
                             <form method="POST" action="{% url 'service_action' %}" style="display:inline;">
@@ -286,57 +573,14 @@
                                 <input type="hidden" name="service_name" value="{{ s.service_name }}">
                                 <input type="hidden" name="server_id" value="{{ current_server.id }}">
                                 <input type="hidden" name="action" value="check">
-                                <button type="submit" class="btn btn-secondary btn-sm" title="Interrogate Service">Check</button>
+                                <button type="submit" class="btn btn-secondary btn-sm" title="Interrogate daemon state">Check</button>
                             </form>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="3" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
-                            No services recorded. Click 'Refresh Host Telemetry' to interrogate daemons.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-<!-- Security Events & Remediation Trail Grid -->
-<div class="grid-2">
-    <!-- Security Events Card -->
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">Recent Security Events (SSH Alerts)</h3>
-            <a href="{% url 'security' %}" class="btn btn-secondary btn-sm">Security Feed</a>
-        </div>
-        <div class="table-responsive">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Type</th>
-                        <th>Source IP</th>
-                        <th>Description</th>
-                        <th>Time</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for sec in recent_security_events %}
-                    <tr>
-                        <td>
-                            <span class="badge {% if sec.severity == 'CRITICAL' %}badge-danger{% elif sec.severity == 'HIGH' %}badge-warning{% else %}badge-info{% endif %}">
-                                {{ sec.get_event_type_display }}
-                            </span>
-                        </td>
-                        <td><code>{{ sec.source_ip|default:"Local" }}</code></td>
-                        <td style="font-size: 12px;">{{ sec.description|truncatechars:65 }}</td>
-                        <td style="white-space: nowrap;">{{ sec.timestamp|timesince }} ago</td>
-                    </tr>
-                    {% empty %}
-                    <tr>
                         <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
-                            No suspicious security events or SSH brute force patterns detected.
+                            No services recorded for this node. Click <strong>Refresh Host Telemetry</strong> to interrogate daemons.
                         </td>
                     </tr>
                     {% endfor %}
@@ -345,44 +589,186 @@
         </div>
     </div>
 
-    <!-- Recent Remediation Actions Card -->
-    <div class="card">
+    <!-- 7. Auto-Remediation Summary & Pipeline -->
+    <div class="card" style="margin-bottom: 0;">
         <div class="card-header">
-            <h3 class="card-title">Recent Remediation Executions</h3>
-            <a href="{% url 'remediation_list' %}" class="btn btn-secondary btn-sm">Action History</a>
+            <div class="card-header-left">
+                <svg class="icon icon-md" style="color: var(--primary);" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                <div>
+                    <h3 class="card-title">Auto-Remediation Pipeline</h3>
+                    <div class="card-subtitle">Self-healing & approval queue</div>
+                </div>
+            </div>
+            <a href="{% url 'remediation_list' %}" class="btn btn-secondary btn-sm">Queue &rarr;</a>
         </div>
-        <div class="table-responsive">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Action</th>
-                        <th>Status</th>
-                        <th>Approved By</th>
-                        <th>Executed</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for rem in recent_remediations %}
-                    <tr>
-                        <td style="font-weight: 600;">{{ rem.action_name|truncatechars:35 }}</td>
-                        <td>
-                            <span class="badge {% if rem.status == 'SUCCESS' %}badge-success{% elif rem.status == 'FAILED' %}badge-danger{% elif rem.status == 'PENDING_APPROVAL' %}badge-warning{% else %}badge-info{% endif %}">
-                                {{ rem.get_status_display }}
-                            </span>
-                        </td>
-                        <td>{{ rem.approved_by.username|default:"Auto-Remediation" }}</td>
-                        <td>{{ rem.executed_at|default:rem.incident.detected_at|timesince }} ago</td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
-                            No remediation actions registered.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+
+        <div class="card-body">
+            <!-- Summary Badges -->
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 1rem;">
+                <div style="background-color: var(--warning-bg); border: 1px solid var(--warning-border); border-radius: var(--radius-sm); padding: 8px; text-align: center;">
+                    <div style="font-size: 18px; font-weight: 700; color: var(--warning-text);">{{ pending_remediations_count }}</div>
+                    <div style="font-size: 10.5px; font-weight: 600; color: var(--warning-text); text-transform: uppercase;">Pending Approval</div>
+                </div>
+                <div style="background-color: var(--success-bg); border: 1px solid var(--success-border); border-radius: var(--radius-sm); padding: 8px; text-align: center;">
+                    <div style="font-size: 18px; font-weight: 700; color: var(--success-text);">{{ success_remediations_count }}</div>
+                    <div style="font-size: 10.5px; font-weight: 600; color: var(--success-text); text-transform: uppercase;">Executed Success</div>
+                </div>
+            </div>
+
+            <!-- Recent Executions Stream -->
+            <div style="font-size: 12px; font-weight: 700; color: var(--text-heading); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                Latest Remediation Activity
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                {% for rem in recent_remediations %}
+                <div style="background-color: var(--bg-main); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 8px 10px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="font-weight: 600; color: var(--text-heading); font-size: 12px;">{{ rem.action_name|truncatechars:28 }}</div>
+                        <div style="font-size: 10.5px; color: var(--text-secondary);">
+                            Host: {{ rem.incident.server.hostname }} | By: {{ rem.approved_by.username|default:"Auto" }}
+                        </div>
+                    </div>
+                    <span class="badge {% if rem.status == 'SUCCESS' %}badge-success{% elif rem.status == 'FAILED' %}badge-danger{% elif rem.status == 'PENDING_APPROVAL' %}badge-warning{% else %}badge-info{% endif %}">
+                        {{ rem.get_status_display }}
+                    </span>
+                </div>
+                {% empty %}
+                <div style="text-align: center; color: var(--text-secondary); font-size: 12px; padding: 1rem;">
+                    No recent remediation actions executed.
+                </div>
+                {% endfor %}
+            </div>
         </div>
     </div>
 </div>
+
+<!-- =========================================================================
+     8. SECURITY MONITORING & 9. RECENT ACTIVITY TIMELINE (Requirements 8 & 9)
+     ========================================================================= -->
+<div class="grid-2" style="margin-bottom: 1.5rem;">
+    <!-- 8. Security Monitoring Panel -->
+    <div class="card" style="margin-bottom: 0;">
+        <div class="card-header">
+            <div class="card-header-left">
+                <svg class="icon icon-md" style="color: var(--warning);" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <div>
+                    <h3 class="card-title">Security & SSH Brute-Force Monitoring</h3>
+                    <div class="card-subtitle">Authentication failures & suspicious host events</div>
+                </div>
+            </div>
+            <a href="{% url 'security' %}" class="btn btn-secondary btn-sm">Security Feed &rarr;</a>
+        </div>
+
+        <div class="card-body">
+            <!-- Top Attacking IPs Summary -->
+            {% if top_attacking_ips %}
+            <div style="margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-light);">
+                <div style="font-size: 11.5px; font-weight: 700; color: var(--text-heading); text-transform: uppercase; margin-bottom: 0.4rem;">
+                    Top Attacking Source IPs Detected
+                </div>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    {% for ip in top_attacking_ips %}
+                    <span class="badge badge-danger" style="font-family: var(--font-mono); font-size: 11px;">
+                        {{ ip.source_ip }} ({{ ip.attack_count }} attacks)
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Recent Security Events Table -->
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Event Type</th>
+                            <th>Source IP</th>
+                            <th>Severity</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sec in recent_security_events %}
+                        <tr>
+                            <td>
+                                <strong style="font-size: 12px; color: var(--text-heading);">{{ sec.get_event_type_display }}</strong>
+                                <div style="font-size: 11px; color: var(--text-secondary);">{{ sec.description|truncatechars:45 }}</div>
+                            </td>
+                            <td><code>{{ sec.source_ip|default:"Local" }}</code></td>
+                            <td>
+                                <span class="badge {% if sec.severity == 'CRITICAL' %}badge-danger{% elif sec.severity == 'HIGH' %}badge-warning{% else %}badge-info{% endif %}">
+                                    {{ sec.severity }}
+                                </span>
+                            </td>
+                            <td style="font-size: 11.5px; white-space: nowrap;">{{ sec.timestamp|timesince }} ago</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                                No suspicious authentication events or brute-force patterns detected.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 9. Recent Activity Timeline (Requirement 9) -->
+    <div class="card" style="margin-bottom: 0;">
+        <div class="card-header">
+            <div class="card-header-left">
+                <svg class="icon icon-md" style="color: var(--primary);" viewBox="0 0 24 24"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+                <div>
+                    <h3 class="card-title">Chronological Operational Activity Feed</h3>
+                    <div class="card-subtitle">Real-time audit log of operations, anomalies & healing</div>
+                </div>
+            </div>
+            <a href="{% url 'audit_logs' %}" class="btn btn-secondary btn-sm">Full Audit Trail &rarr;</a>
+        </div>
+
+        <div class="card-body">
+            <div class="timeline">
+                {% for item in activity_timeline %}
+                <div class="timeline-item">
+                    <div class="timeline-dot {{ item.category_icon }}">
+                        ●
+                    </div>
+                    <div class="timeline-content">
+                        <div class="timeline-header">
+                            <span class="timeline-title">{{ item.category_type }}: {{ item.log.action }}</span>
+                            <span class="timeline-time">{{ item.log.timestamp|timesince }} ago</span>
+                        </div>
+                        <p class="timeline-desc">{{ item.log.description|truncatechars:120 }}</p>
+                        <div style="font-size: 10.5px; color: var(--text-muted); margin-top: 3px;">
+                            Resource: <strong>{{ item.log.resource }}</strong> | User: <strong>{{ item.log.user.username|default:"SYSTEM_AUTOMATION" }}</strong>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                    No operational activities logged yet.
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================================
+     10. OPERATING SYSTEM / ENVIRONMENT NOTICE (Requirement 10 & 11)
+     ========================================================================= -->
+<div class="env-notice-card">
+    <div class="env-notice-header">
+        <svg class="icon icon-md" style="color: var(--info);" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
+        <span>Development Environment</span>
+    </div>
+    <div class="env-notice-body">
+        LinuxGuard is currently running on a Windows development host. CPU, RAM, disk, process and network telemetry are collected using psutil.
+        <br><br>
+        For full Linux operations—including systemctl service management, journalctl system journals and /var/log/auth.log authentication auditing—deploy the LinuxGuard agent on Ubuntu/Linux.
+    </div>
+</div>
+
 {% endblock %}

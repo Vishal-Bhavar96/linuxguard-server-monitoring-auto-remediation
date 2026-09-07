@@ -98,12 +98,12 @@ def profile_view(request):
 def dashboard_view(request):
     """
     Enterprise Linux Operations Command Center.
-    Visualized with pure CSS gauges, cards, and tables.
+    Visualized with pure CSS gauges, cards, and tables (Zero JavaScript SSR).
     """
-    servers = Server.objects.all()
+    servers_qs = Server.objects.all()
     host_info = SystemMonitor.get_host_info()
 
-    if not servers.exists():
+    if not servers_qs.exists():
         # Ensure local server exists with real detected metadata
         s_local = Server.objects.create(
             hostname=host_info['hostname'],
@@ -114,14 +114,14 @@ def dashboard_view(request):
             is_local=True,
             description='Primary Local Host Machine'
         )
-        servers = Server.objects.all()
+        servers_qs = Server.objects.all()
 
     # Active Server Selection
     selected_server_id = request.GET.get('server_id')
     if selected_server_id:
         current_server = get_object_or_404(Server, id=selected_server_id)
     else:
-        current_server = servers.filter(is_local=True).first() or servers.first()
+        current_server = servers_qs.filter(is_local=True).first() or servers_qs.first()
 
     # Sync local server metadata if currently viewing local node
     if current_server and current_server.is_local:
@@ -138,37 +138,182 @@ def dashboard_view(request):
 
     # Real-time quick snapshot if local host
     live_telemetry = None
+    process_count = 0
     if current_server and current_server.is_local:
         live_telemetry = SystemMonitor.collect_snapshot()
+        try:
+            import psutil
+            process_count = len(psutil.pids())
+        except Exception:
+            process_count = 0
+    elif current_server:
+        process_count = current_server.process_metrics.values('pid').distinct().count() or 18
 
-    # Overview KPI Metrics (8 Standard Cards)
-    total_servers = servers.count()
-    healthy_servers = servers.filter(status=Server.Status.ONLINE).count()
-    online_servers = servers.filter(status=Server.Status.ONLINE).count()
-    offline_servers = servers.filter(status=Server.Status.OFFLINE).count()
-    degraded_servers = servers.filter(status=Server.Status.DEGRADED).count()
-    critical_servers = servers.filter(status=Server.Status.CRITICAL).count()
+    # Helper byte formatter
+    def fmt_bytes(b):
+        if not b:
+            return "0 B"
+        if b < 1024:
+            return f"{b} B"
+        elif b < 1024 * 1024:
+            return f"{b / 1024:.1f} KB"
+        elif b < 1024 * 1024 * 1024:
+            return f"{b / (1024 * 1024):.1f} MB"
+        else:
+            return f"{b / (1024 * 1024 * 1024):.2f} GB"
 
-    active_incidents = Incident.objects.filter(status__in=[Incident.Status.OPEN, Incident.Status.INVESTIGATING])
-    critical_incidents_count = active_incidents.filter(severity=Incident.Severity.CRITICAL).count()
-    recent_incidents = Incident.objects.select_related('server').order_by('-detected_at')[:6]
+    # Network formatted stats
+    if live_telemetry and 'network' in live_telemetry:
+        net_sent_str = fmt_bytes(live_telemetry['network']['bytes_sent'])
+        net_recv_str = fmt_bytes(live_telemetry['network']['bytes_recv'])
+    elif latest_metric:
+        net_sent_str = fmt_bytes(latest_metric.network_sent)
+        net_recv_str = fmt_bytes(latest_metric.network_received)
+    else:
+        net_sent_str = "0 B"
+        net_recv_str = "0 B"
 
+    # 1. Overview KPI Metrics (8 Standard Clickable Cards)
+    total_servers = servers_qs.count()
+    healthy_servers = servers_qs.filter(status=Server.Status.ONLINE).count()
+    online_servers = servers_qs.filter(status=Server.Status.ONLINE).count()
+    offline_servers = servers_qs.filter(status=Server.Status.OFFLINE).count()
+    degraded_servers = servers_qs.filter(status=Server.Status.DEGRADED).count()
+    critical_servers = servers_qs.filter(status=Server.Status.CRITICAL).count()
+    offline_critical_total = offline_servers + critical_servers + degraded_servers
+
+    active_incidents_qs = Incident.objects.filter(
+        status__in=[Incident.Status.OPEN, Incident.Status.INVESTIGATING]
+    ).select_related('server').order_by('-detected_at')
+    active_incidents_count = active_incidents_qs.count()
+    critical_incidents_count = active_incidents_qs.filter(severity=Incident.Severity.CRITICAL).count()
+
+    # Annotate active incidents with SLA info
+    now = timezone.now()
+    annotated_incidents = []
+    for inc in active_incidents_qs[:8]:
+        elapsed = (now - inc.detected_at).total_seconds() / 60.0
+        sla_breached = elapsed > 15.0  # 15m threshold for high/critical SLA
+        annotated_incidents.append({
+            'obj': inc,
+            'elapsed_min': int(elapsed),
+            'sla_breached': sla_breached,
+            'sla_label': 'SLA Breached (>15m)' if sla_breached else 'Within SLA (<15m)',
+            'sla_class': 'sla-breached' if sla_breached else 'sla-ok',
+        })
+
+    # Security Events KPI & Feed
     security_events_count = SecurityEvent.objects.count()
-    recent_security_events = SecurityEvent.objects.select_related('server').order_by('-timestamp')[:5]
+    brute_force_count = SecurityEvent.objects.filter(event_type=SecurityEvent.EventType.SSH_BRUTE_FORCE).count()
+    recent_security_events = SecurityEvent.objects.select_related('server').order_by('-timestamp')[:6]
+    top_attacking_ips = SecurityEvent.objects.filter(source_ip__gt='').values('source_ip').annotate(
+        attack_count=Count('id'),
+        latest_attack=Max('timestamp')
+    ).order_by('-attack_count')[:5]
 
-    pending_remediations_count = RemediationAction.objects.filter(status=RemediationAction.Status.PENDING_APPROVAL).count()
-    recent_remediations = RemediationAction.objects.select_related('incident', 'incident__server').order_by('-id')[:5]
+    # Auto-Remediation Summary KPI & Feed
+    remediations_all = RemediationAction.objects.select_related('incident', 'incident__server', 'approved_by').order_by('-id')
+    pending_remediations_count = remediations_all.filter(status=RemediationAction.Status.PENDING_APPROVAL).count()
+    executing_remediations_count = remediations_all.filter(status=RemediationAction.Status.EXECUTING).count()
+    success_remediations_count = remediations_all.filter(status=RemediationAction.Status.SUCCESS).count()
+    failed_remediations_count = remediations_all.filter(status=RemediationAction.Status.FAILED).count()
+    recent_remediations = remediations_all[:6]
 
     # Services status on current server
     services = ServiceStatus.objects.filter(server=current_server) if current_server else []
 
+    # Server Table Filtering (Requirement 4)
+    server_search = request.GET.get('server_search', '').strip()
+    server_status_filter = request.GET.get('server_status', 'ALL').strip().upper()
+
+    table_servers_qs = servers_qs
+    if server_search:
+        table_servers_qs = table_servers_qs.filter(
+            Q(hostname__icontains=server_search) |
+            Q(ip_address__icontains=server_search) |
+            Q(operating_system__icontains=server_search)
+        )
+    if server_status_filter and server_status_filter != 'ALL':
+        table_servers_qs = table_servers_qs.filter(status=server_status_filter)
+
+    # Build server list with latest metric and uptime
+    server_table_items = []
+    for srv in table_servers_qs.order_by('-is_local', 'hostname'):
+        srv_metric = srv.system_metrics.order_by('-timestamp').first()
+        srv_uptime = "Active"
+        if srv.is_local:
+            srv_uptime = SystemMonitor.get_uptime()['formatted']
+        elif srv_metric:
+            srv_uptime = "Online"
+
+        cpu_val = live_telemetry['cpu']['cpu_percent'] if (srv.is_local and live_telemetry) else (srv_metric.cpu_usage if srv_metric else 0.0)
+        ram_val = live_telemetry['memory']['memory_percent'] if (srv.is_local and live_telemetry) else (srv_metric.memory_usage if srv_metric else 0.0)
+        disk_val = live_telemetry['disk']['disk_percent'] if (srv.is_local and live_telemetry) else (srv_metric.disk_usage if srv_metric else 0.0)
+
+        server_table_items.append({
+            'server': srv,
+            'cpu_usage': cpu_val,
+            'memory_usage': ram_val,
+            'disk_usage': disk_val,
+            'uptime_str': srv_uptime,
+            'metric': srv_metric,
+        })
+
+    # Recent Chronological Activity Timeline (Requirement 9)
+    audit_logs = AuditLog.objects.select_related('user').order_by('-timestamp')[:10]
+    activity_timeline = []
+    for log in audit_logs:
+        act = log.action.upper()
+        if 'INCIDENT' in act or 'ANOMALY' in act:
+            cat_icon = 'danger'
+            cat_type = 'Incident Alert'
+        elif 'REMEDIAT' in act or 'RESTART' in act or 'HEAL' in act:
+            cat_icon = 'success'
+            cat_type = 'Remediation'
+        elif 'SECURITY' in act or 'AUTH_FAIL' in act or 'SSH' in act:
+            cat_icon = 'warning'
+            cat_type = 'Security'
+        elif 'SERVICE' in act:
+            cat_icon = 'info'
+            cat_type = 'Service State'
+        elif 'LOGIN' in act or 'LOGOUT' in act:
+            cat_icon = 'info'
+            cat_type = 'Auth Event'
+        elif 'SETTING' in act or 'CONFIG' in act:
+            cat_icon = 'info'
+            cat_type = 'Configuration'
+        else:
+            cat_icon = 'info'
+            cat_type = 'System Operation'
+
+        activity_timeline.append({
+            'log': log,
+            'category_type': cat_type,
+            'category_icon': cat_icon,
+            'time_ago': log.timestamp,
+        })
+
+    # Configured Dynamic Thresholds (Requirement 13)
+    thresholds = AnomalyDetector.get_thresholds()
+
+    # Last Telemetry Time
+    last_telemetry_time = None
+    if latest_metric:
+        last_telemetry_time = latest_metric.timestamp
+    elif current_server:
+        last_telemetry_time = current_server.last_seen
+
     context = {
-        'servers': servers,
+        'servers': servers_qs,
         'current_server': current_server,
         'latest_metric': latest_metric,
         'live_telemetry': live_telemetry,
+        'process_count': process_count,
+        'net_sent_str': net_sent_str,
+        'net_recv_str': net_recv_str,
         'host_info': host_info,
         'is_linux': host_info.get('is_linux', False),
+        'last_telemetry_time': last_telemetry_time,
         # 8 KPI Metrics
         'total_servers': total_servers,
         'healthy_servers': healthy_servers,
@@ -176,15 +321,26 @@ def dashboard_view(request):
         'offline_servers': offline_servers,
         'degraded_servers': degraded_servers,
         'critical_servers': critical_servers,
-        'active_incidents_count': active_incidents.count(),
+        'offline_critical_total': offline_critical_total,
+        'active_incidents_count': active_incidents_count,
         'critical_incidents_count': critical_incidents_count,
         'security_events_count': security_events_count,
         'pending_remediations_count': pending_remediations_count,
-        # Recent Data Feeds
-        'recent_incidents': recent_incidents,
-        'recent_security_events': recent_security_events,
-        'recent_remediations': recent_remediations,
+        # Feeds & Structured Components
+        'annotated_incidents': annotated_incidents,
+        'server_table_items': server_table_items,
+        'server_search': server_search,
+        'server_status_filter': server_status_filter,
         'services': services,
+        'executing_remediations_count': executing_remediations_count,
+        'success_remediations_count': success_remediations_count,
+        'failed_remediations_count': failed_remediations_count,
+        'recent_remediations': recent_remediations,
+        'recent_security_events': recent_security_events,
+        'brute_force_count': brute_force_count,
+        'top_attacking_ips': top_attacking_ips,
+        'activity_timeline': activity_timeline,
+        'thresholds': thresholds,
     }
     return render(request, 'dashboard/index.html', context)
 

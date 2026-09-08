@@ -132,7 +132,9 @@ graph TD
 
 ---
 
-## 🔄 End-to-End System Workflow (2D Architecture Flow)
+## 🔄 Architecture Pipeline & End-to-End Workflow
+
+LinuxGuard implements a closed-loop, deterministic pipeline that spans from low-level Linux kernel telemetry collection to rule-based root cause analysis, safe auto-remediation, post-execution verification, SQL persistence, and zero-JavaScript Server-Side Rendered (SSR) dashboard presentation.
 
 ```
 +-----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -169,6 +171,208 @@ graph TD
 |  ──► [7] Suggest / Execute Safe Fix ──► [8] Verify Service State ──► [9] Persist in SQL ──► [10] Refresh Dashboard ──► [11] Immutable Audit Log                     |
 +-----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
+
+---
+
+### 1. Sequence Pipeline Flowchart (Data Movement Across Subsystems)
+
+The following sequence diagram details the exact chronological execution path from background telemetry harvesting to automated remediation, post-fix state validation, and UI presentation:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as 👤 Operator / Admin
+    participant UI as 🖥️ SSR Web Console (Django Views)
+    participant Worker as ⚙️ Monitoring Worker (monitor_server)
+    participant Engines as 🐍 Telemetry & Ingestion Engines
+    participant Detector as 🧠 Anomaly & RCA Engine
+    participant Security as 🛡️ Command Security & Allowlist
+    participant Target as 🐧 Linux Host (Kernel / systemd / Logs)
+    participant DB as 🗄️ SQL Database (ORM Models)
+
+    Note over Worker,Target: Stage 1-2: Continuous Telemetry Ingestion & SQL Normalization
+    Worker->>Engines: Trigger monitoring cycle snapshot
+    Engines->>Target: Poll psutil, /proc, systemctl, journalctl, auth.log
+    Target-->>Engines: Return CPU, RAM, Disk, Process table, Service states, Log lines
+    Engines->>DB: Persist SystemMetric & ProcessMetric snapshot records
+    Engines->>DB: Update ServiceStatus table records
+
+    Note over Worker,Detector: Stage 3-4: Threshold Evaluation, Deduplication & Root Cause Diagnosis
+    Worker->>Detector: Dispatch raw metrics & service states
+    Detector->>DB: Query active dynamic thresholds (SystemSetting)
+    Detector->>Detector: Evaluate threshold breaches (CPU > 85%, RAM > 90%, Disk > 80%, Service Dead)
+    Detector->>Detector: Correlate symptoms & calculate Root Cause Confidence (%)
+    Detector->>DB: Check open incidents to prevent alert duplication (Deduplication Gate)
+    Detector->>DB: Insert new Incident or update existing Incident timestamp
+
+    alt Case A: Safe Allowlisted Service Failure (Auto-Remediation Enabled)
+        Note over Detector,Security: Stage 5-7: Safe Autonomous Self-Healing & Verification
+        Detector->>Worker: Dispatch Auto-Remediation Trigger (e.g., nginx / docker / mysql)
+        Worker->>DB: Create RemediationAction (requires_approval=False, Status: EXECUTING)
+        Worker->>Security: Submit command token array (e.g., ['systemctl', 'restart', 'nginx'])
+        Security->>Security: Validate service against strict allowlist & regex rules
+        Security->>Target: Execute via subprocess.run(shell=False, timeout=30)
+        Target-->>Security: Return stdout, stderr, and exit returncode (0)
+        Worker->>Target: Post-Execution Verification check (systemctl is-active)
+        Target-->>Worker: Status confirmed: ACTIVE
+        Worker->>DB: Update RemediationAction (Status: SUCCESS, Output recorded)
+        Worker->>DB: Update Incident (Status: RESOLVED)
+        Worker->>DB: Record immutable AuditLog entry (Action: SERVICE_REMEDIATED)
+    else Case B: High-Risk Action / Sensitive Resource (Admin Approval Required)
+        Note over Detector,UI: Human-in-the-Loop Approval & Manual Execution
+        Detector->>DB: Create RemediationAction (requires_approval=True, Status: PENDING_APPROVAL)
+        User->>UI: Access Incident Detail / Remediation Approval Queue
+        UI->>DB: Query pending proposals & Root Cause Evidence
+        User->>UI: Click "Approve & Execute Remediation" (POST Request + CSRF)
+        UI->>Security: Validate RBAC role (@admin_required / @operator_required)
+        UI->>Security: Submit command for allowlist inspection
+        Security->>Target: Execute via subprocess.run(shell=False)
+        Target-->>UI: Command execution output & return code
+        UI->>Target: Re-evaluate target state
+        UI->>DB: Update RemediationAction (SUCCESS) & Incident (RESOLVED)
+        UI->>DB: Record immutable AuditLog entry with operator ID & IP
+    end
+
+    Note over User,UI: Stage 8: Zero-JavaScript Server-Side Rendered Presentation
+    User->>UI: Request Dashboard / Metrics / Incidents / Audit URL
+    UI->>DB: Execute optimized SQL ORM queries (SELECT, JOIN, Aggregate Avg/Max/Min)
+    DB-->>UI: Return normalized metrics, active alerts, and audit records
+    UI-->>User: Render responsive HTML5 + CSS3 glassmorphism dashboard (0 client-side JS)
+```
+
+---
+
+### 2. Auto-Remediation Triage & Decision Policy Gate
+
+LinuxGuard enforces a strict triage decision tree to classify detected system anomalies into autonomous self-healing, manual operator triggers, or admin-approved actions:
+
+```mermaid
+flowchart TD
+    classDef startNode fill:#e0f2fe,stroke:#0284c7,stroke-width:2px,color:#0c4a6e;
+    classDef detectNode fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f;
+    classDef decisionNode fill:#f3e8ff,stroke:#9333ea,stroke-width:2px,color:#581c87;
+    classDef autoNode fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d;
+    classDef manualNode fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d;
+    classDef execNode fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#881337;
+    classDef successNode fill:#d1fae5,stroke:#059669,stroke-width:2px,color:#064e3b;
+
+    START["🚀 Ingest Host Telemetry & Service States"]:::startNode --> CHECK{"Threshold Violated / Service Dead / SSH Attack?"}:::detectNode
+    CHECK -- No --> OK["✓ System Healthy (Record Time-Series Metric Snapshot)"]:::successNode
+    CHECK -- Yes --> DEDUP{"Active Open Incident Already Exists?"}:::decisionNode
+    DEDUP -- Yes --> UPDATE_INC["Update Existing Incident Last Seen & Telemetry"]:::detectNode
+    DEDUP -- No --> NEW_INC["Create New Incident & Correlate Root Cause"]:::detectNode
+
+    NEW_INC --> EVAL_POLICY{"Evaluate Remediation Policy"}:::decisionNode
+    UPDATE_INC --> EVAL_POLICY
+
+    EVAL_POLICY -- "Safe Allowlisted Daemon (nginx, docker, mysql, postgresql)" --> AUTO_GATE["⚡ Auto-Remediation Policy Allowed"]:::autoNode
+    EVAL_POLICY -- "Service Crash Diagnostic (journalctl capture)" --> OP_GATE["👤 Operator Manual Action Required"]:::manualNode
+    EVAL_POLICY -- "High-Risk Resource Action (Disk purge / Process restart)" --> ADMIN_GATE["🔒 Admin Approval Queue Required"]:::manualNode
+
+    AUTO_GATE --> CREATE_ACTION_AUTO["Create RemediationAction (requires_approval=False)"]:::autoNode
+    OP_GATE --> WAIT_OP["Operator Reviews Root Cause & Clicks Trigger"]:::manualNode
+    ADMIN_GATE --> WAIT_ADMIN["Admin Reviews Incident & Clicks Approve"]:::manualNode
+
+    WAIT_OP --> CREATE_ACTION_MAN["Create RemediationAction (User=Operator)"]:::manualNode
+    WAIT_ADMIN --> CREATE_ACTION_ADM["Create RemediationAction (User=Admin)"]:::manualNode
+
+    CREATE_ACTION_AUTO --> SEC_CHECK{"CommandSecurity Allowlist Check"}:::execNode
+    CREATE_ACTION_MAN --> SEC_CHECK
+    CREATE_ACTION_ADM --> SEC_CHECK
+
+    SEC_CHECK -- "Violates Policy / Unsafe Pattern" --> BLOCKED["❌ Block Execution & Record Security Audit"]:::manualNode
+    SEC_CHECK -- "Passed Allowlist Validation" --> EXEC_CMD["🛡️ Execute subprocess.run(shell=False)"]:::execNode
+
+    EXEC_CMD --> POST_VERIFY{"Post-Execution State Verification (systemctl is-active / psutil)"}:::decisionNode
+    POST_VERIFY -- "Service Active / Metric Normalized" --> RESOLVE["✅ Mark Incident RESOLVED & Action SUCCESS"]:::successNode
+    POST_VERIFY -- "Still Inactive / High Load" --> ESCALATE["⚠️ Escalate Severity to CRITICAL & Alert Operator"]:::manualNode
+
+    RESOLVE --> AUDIT["📝 Record Immutable Audit Log & Update SSR UI"]:::successNode
+    ESCALATE --> AUDIT
+    BLOCKED --> AUDIT
+```
+
+---
+
+### 3. End-to-End 8-Stage Architecture Pipeline Deep Dive
+
+#### Stage 1: Real-Time Host Telemetry Harvesting & Probing
+- **Telemetry Engines**: `SystemMonitor`, `ProcessMonitor`, `ServiceMonitor`, `SSHMonitor`, and `LogAnalyzer`.
+- **Operating System Interface**: Directly interrogates Linux kernel counters (`/proc/stat`, `/proc/meminfo`, `/proc/diskstats`), systemd daemon control planes (`systemctl is-active`, `systemctl list-unit-files`), Linux error journals (`journalctl -p err..alert -n 50`), and authentication logs (`/var/log/auth.log`).
+- **Non-Blocking Execution**: Enforces sub-second timeouts to guarantee that slow OS probes never block core event dispatching.
+
+#### Stage 2: Metric Normalization, Sanitization & SQL Relational Persistence
+- **Data Normalization**: Raw CPU percentages (user, system, idle), memory breakdowns (used, available, swap), filesystem mounts, and network I/O deltas are validated and cast into strongly typed Python primitives.
+- **Relational Storage**: Inserts records into `monitoring_systemmetric` (time-series hardware snapshot) and `monitoring_processmetric` (top consuming processes), while performing `update_or_create` on `monitoring_servicestatus`.
+
+#### Stage 3: Threshold Anomaly Detection & Incident Deduplication
+- **Dynamic Rule Evaluation**: Evaluates active metrics against threshold rules stored in `monitoring_systemsetting` (defaulting to CPU > 85%, RAM > 90%, Disk > 80%, SSH Auth Failures >= 5, and any critical daemon in `INACTIVE` or `FAILED` state).
+- **Incident Deduplication**: Checks for existing open/investigating incidents for the same server and component. If an active incident exists, it updates telemetry metrics and timestamps without triggering alert storms or duplicate notification spam.
+
+#### Stage 4: Rule-Based Root Cause Diagnosis & Evidence Synthesis
+- **Multivariate Correlation**: `RootCauseEngine` correlates metric anomalies with process and service states:
+  - **High CPU**: Correlates overall CPU spike with top process PIDs to distinguish runaway worker loops from distributed load contention.
+  - **High RAM**: Pinpoints individual process memory allocations and correlates them with system swap saturation.
+  - **Disk Saturation**: Correlates partition capacity with `/var/log` consumption and growth patterns.
+  - **Daemon Failure**: Correlates service dead states with systemd exit codes and recent `journalctl` error logs.
+- **Diagnostic Output**: Generates a **Probable Cause**, a mathematical **Confidence Score (70% - 95%)**, a human-readable **Evidence Summary**, and a step-by-step **Remediation Recommendation**.
+
+#### Stage 5: Remediation Decision Engine & Governance Gating
+- **Remediation Policy Evaluation**: `RemediationEngine` determines the remediation pathway:
+  - **Autonomous Self-Healing**: Safe, predefined daemons (`nginx`, `docker`, `mysql`, `postgresql`) are flagged with `requires_approval=False` for immediate automated recovery.
+  - **Human-in-the-Loop Operator Actions**: Diagnostic captures and service checks require manual trigger by authenticated operators.
+  - **Admin Approval Queue**: Potentially disruptive actions (process termination, partition cleanup, configuration updates) require explicit authorization from an `ADMIN` user.
+
+#### Stage 6: Security Sandbox & Command Allowlist Enforcement
+- **Allowlist Filtering**: Every command is validated by `CommandSecurity` before reaching the execution layer:
+  - Validates that command tokens match strict allowlist patterns (e.g., `systemctl restart <service>`, `df -h`, `uptime`, `free -m`).
+  - Validates service parameters against a strict set of alphanumeric identifiers.
+  - Blocks dangerous shell characters (`|`, `&`, `;`, `$()`, `` ` ``, `>`, `<`) and forbidden destructive commands (`rm`, `rm -rf`, `shutdown`, `reboot`, `kill -9`, `mkfs`, `dd`).
+- **Safe Subprocess Execution**: Commands are strictly invoked with `subprocess.run(command_list, shell=False, timeout=30)`.
+
+#### Stage 7: Closed-Loop Post-Execution Verification
+- **State Validation**: Rather than assuming execution success, the platform immediately verifies system state after command completion:
+  - For service restarts: Queries `systemctl is-active <service>` to confirm the daemon transitioned to active running state.
+  - For system metrics: Re-evaluates CPU and memory levels to ensure recovery.
+- **Incident Resolution**: If verified active, the incident is automatically transitioned to `RESOLVED` and the remediation action marked `SUCCESS`. If still failing, the incident is escalated to `CRITICAL` with state `INVESTIGATING`.
+
+#### Stage 8: Immutable Audit Logging & Zero-JS SSR Presentation
+- **Forensic Audit Logging**: Records every login, metric cycle, incident update, settings change, and remediation execution in `monitoring_auditlog` with actor identity, timestamp, resource ID, IP address, and execution result.
+- **Server-Side Rendered (SSR) Presentation**: Views query the SQL database using Django ORM (`select_related`, `prefetch_related`, `aggregate`) and render responsive HTML5/CSS3 templates. Zero client-side JavaScript ensures maximum speed, minimal attack surface, and seamless browser compatibility.
+
+---
+
+### 4. Pipeline Data Flow & State Lifecycle Matrix
+
+| Pipeline Stage | Ingested Data / Input Artifacts | Processing Engine / Component | Output Artifact / DB Record | Security & Verification Controls |
+| :--- | :--- | :--- | :--- | :--- |
+| **1. Ingestion** | Linux `/proc`, `psutil`, `systemctl`, logs | `SystemMonitor`, `ServiceMonitor`, `SSHMonitor` | In-memory raw telemetry dictionaries | Non-blocking execution, timeout bounded (10s) |
+| **2. Storage** | Telemetry dictionaries | Django ORM / SQLite / MySQL | `SystemMetric`, `ProcessMetric`, `ServiceStatus` | SQL parameterized queries, data sanitization |
+| **3. Detection** | Ingested metrics, dynamic settings | `AnomalyDetector`, `SeverityEngine` | Evaluated anomaly list, severity flags | Deduplication window check, threshold validation |
+| **4. Root Cause** | Metric breaches + Top 10 process table | `RootCauseEngine` | `Incident` record with RCA & confidence % | Rule-based reasoning, confidence scoring |
+| **5. Decision Gate** | Unresolved incidents & service types | `RemediationEngine` | `RemediationAction` (`PROPOSED` / `PENDING`) | Policy allowlist for auto-restartable daemons |
+| **6. Execution** | Predefined remediation command | `CommandSecurity` | Subprocess stdout, stderr, exit code | Strict token allowlist, `shell=False`, 30s timeout |
+| **7. Verification** | Target service status post-execution | `ServiceMonitor` | `Incident` (RESOLVED) / `Action` (SUCCESS) | Active state confirmation (`systemctl is-active`) |
+| **8. Audit & SSR** | Action results, user sessions | Django Views & Template Engine | `AuditLog` record + SSR HTML5 / CSS3 UI | Immutable audit trail, CSRF tokens, RBAC rules |
+
+---
+
+### 5. Worker Daemon Execution Loop & Failure Resilience
+
+The telemetry collection and self-healing loop runs via the Django management command:
+
+```bash
+# Continuous background monitoring daemon (30s polling cycle)
+python manage.py monitor_server --interval 30
+
+# Single execution cycle (cron / CI pipeline integration)
+python manage.py monitor_server --once
+```
+
+**Resilience Features**:
+- **Automatic Server Auto-Discovery**: If no servers exist in the database, the worker dynamically provisions the local host machine using detected kernel and network parameters.
+- **Fault-Tolerant Exception Handling**: Subprocess timeouts and OS errors on individual servers are isolated, logged to the console, and recorded in audit logs without crashing the long-running daemon.
+- **Heartbeat & Health Tracking**: Each cycle updates `server.last_seen` and dynamically computes overall host health (`ONLINE`, `DEGRADED`, `CRITICAL`).
 
 ---
 
